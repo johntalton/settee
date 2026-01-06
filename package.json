@@ -1,10 +1,11 @@
 {
 	"name": "@johntalton/settee",
+	"version": "1.0.0",
 	"type": "module",
 	"exports": {
 		".": "./src/settee.js"
 	},
 	"scripts": {
-		"start": "node --permission --allow-fs-read=package.json --allow-fs-read=./src --allow-fs-read=.env --allow-fs-read=./docs --allow-fs-write=./docs/*  --env-file=.env src/index.js"
+		"start": "node --permission --allow-fs-read=package.json --allow-fs-read=./src --allow-fs-read=.env --allow-fs-read=./data --allow-fs-write=./data/*  --env-file=.env example.js"
 	}
 }

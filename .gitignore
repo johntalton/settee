@@ -1,3 +1,5 @@
-docs/
+data/
 
+.DS_Store
 .env
+_*
