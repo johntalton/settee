@@ -1,0 +1,7 @@
+{
+	"name": "@johntalton/settee",
+	"type": "module",
+	"scripts": {
+		"start": "node --permission --allow-fs-read=./src --allow-fs-read=.env --allow-fs-read=./docs --allow-fs-write=./docs/*  --env-file=.env src/index.js"
+	}
+}
