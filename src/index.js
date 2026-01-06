@@ -1,4 +1,4 @@
-import { Settee } from './settee.js'
+import { Settee } from '@johntalton/settee'
 
 
 async function main() {
@@ -21,7 +21,25 @@ async function main() {
 	const doc = await Settee.get('42')
 	if(doc === undefined) { throw new Error('doc not found') }
 
-	console.log(doc)
+	console.log('initial', doc)
+
+	if(await Settee.isModified('42', doc['settee:revision'])) {
+		throw new Error('modified')
+	}
+
+	const updatedDoc = {
+		...doc,
+		name: 'test2'
+	}
+
+	const updatedDocResult = await Settee.update(updatedDoc)
+	console.log('results in', updatedDocResult)
+
+	const latestDoc = await Settee.get('42')
+	console.log('latest', latestDoc)
+
+
+	await Settee.delete('42', latestDoc['settee:revision'])
 }
 
 
