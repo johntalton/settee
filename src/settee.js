@@ -59,7 +59,7 @@ const ENV_TIMEOUT_MS = parseInt(process.env[SETTEE_ENV.TIMEOUT_MS] ?? SETTEE_DEF
  * @param {SetteeOptions|undefined} [options]
  * @returns {SetteeOptionsResolved}
  */
-export function fromOptions(options){
+export function fromOptions(options) {
 	const db = options?.db ?? ENV_ROOT
 	const documentsDir = options?.documentsDir ?? ENV_DOCS_DIR
 	const documentsRoot = options?.documentsRoot ?? path.join(db, documentsDir)
@@ -314,25 +314,28 @@ export class Settee {
 
 	/**
 	 * @template T
-	 * @param {(doc: Document<T>) => [ key: any, value: any]} fn
+	 * @param {(doc: Document<T>) => Array<[ any, any ]>|undefined} fn
 	 * @param {string|Array<string>|undefined} [filterKey]
 	 * @param {SetteeOptions|undefined} [options]
 	 */
 	static async map(fn, filterKey, options) {
-		const {
-			documentsRoot,
-			signal
-		} = fromOptions(options)
+		function formatResults(result, total_count) {
+			const output = result
+				.entries()
+				.filter(entry => entry[1] !== undefined)
+				.map(entry => entry[1].map(item => ({ [SETTEE_INTERNAL_PROPERTIES.ID]: entry[0], key: item[0], value: item[1] })))
+				.reduce((accumulator, value) => {
+					value.forEach(element => {
+						accumulator.push(element)
+					})
 
-		const filterKeyList = filterKey === undefined ? [] : Array.isArray(filterKey) ? filterKey : [ filterKey ]
+					return accumulator
+				}, [])
 
-		const result = new Map()
+		return { total_count, rows: output }
+		}
 
-		const listing = await fs.readdir(documentsRoot, { withFileTypes: true, encoding: 'utf8' })
-		for (const entry of listing) {
-			if(signal.aborted) { break }
-			if(!entry.isFile()) { continue }
-
+		async function processDirent(entry, result) {
 			// console.log('mapping over', entry.name)
 			const filepath = path.join(documentsRoot, entry.name)
 			const json = await fs.readFile(filepath, { encoding: 'utf8', flag: 'r', signal })
@@ -350,20 +353,34 @@ export class Settee {
 			}
 		}
 
-		if(signal.aborted) { return }
 
-		const output = result
-			.entries()
-			.filter(entry => entry[1] !== undefined)
-			.map(entry => entry[1].map(item => ({ [SETTEE_INTERNAL_PROPERTIES.ID]: entry[0], key: item[0], value: item[1] })))
-			.reduce((accumulator, value) => {
-				value.forEach(element => {
-					accumulator.push(element)
+		const {
+			documentsRoot,
+			signal
+		} = fromOptions(options)
+
+		const filterKeyList = filterKey === undefined ? [] : Array.isArray(filterKey) ? filterKey : [ filterKey ]
+
+		const result = new Map()
+		let total_count = 0
+
+		const useIterator = true
+		const listing = await (useIterator ?
+			fs.opendir(documentsRoot, { bufferSize: 32, encoding: 'utf8' }) :
+			fs.readdir(documentsRoot, { withFileTypes: true, encoding: 'utf8' }))
+
+		for await (const entry of listing) {
+			signal.throwIfAborted()
+			if(!entry.isFile()) { continue }
+			if(entry.name.startsWith('.')) { continue }
+			await processDirent(entry, result)
+				.catch(e => {
+					console.warn('process Dirent error', entry.name, e.message)
 				})
+			total_count += 1
+		}
 
-				return accumulator
-			}, [])
-
-		return { rows: output }
+		// signal.throwIfAborted()
+		return formatResults(result, total_count)
 	}
 }
