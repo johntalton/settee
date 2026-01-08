@@ -3,9 +3,9 @@
 	"version": "1.0.0",
 	"type": "module",
 	"exports": {
-		".": "./src/settee.js"
+		".": "./src/index.js"
 	},
 	"scripts": {
-		"start": "node --permission --allow-fs-read=package.json --allow-fs-read=./src --allow-fs-read=.env --allow-fs-read=./data --allow-fs-write=./data/*  --env-file=.env example.js"
+		"start": "node --permission --no-warnings --allow-worker --allow-fs-read=package.json --allow-fs-read=./src --allow-fs-read=.env --allow-fs-read=./data --allow-fs-write=./data/*  --env-file=.env"
 	}
 }

@@ -1,122 +1,117 @@
-import { isMainThread, Worker, parentPort } from 'node:worker_threads'
+import { isMainThread, Worker, parentPort, workerData, threadName } from 'node:worker_threads'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { SETTEE_INTERNAL_PROPERTIES, fromOptions } from '@johntalton/settee'
+import {
+	SETTEE_DEFAULT,
+	formatResults,
+	fromOptions,
+	importView,
+	processFilePath
+} from '@johntalton/settee'
 
-/** @import { SetteeOptions, Document } from '@johntalton/settee' */
-
-/**
- * @param {Map<string, Array<[ any, any ]>>} result
- * @param {number} total_count
- */
-function formatResults(result, total_count) {
-	const output = result
-		.entries()
-		.filter(entry => entry[1] !== undefined)
-		.map(entry => entry[1].map(item => ({ [SETTEE_INTERNAL_PROPERTIES.ID]: entry[0], key: item[0], value: item[1] })))
-		.reduce((accumulator, value) => {
-			value.forEach(element => {
-				accumulator.push(element)
-			})
-
-			return accumulator
-		}, [])
-
-	return { total_count, rows: output }
-}
+/** @import { SetteeOptions, ViewFunction } from '@johntalton/settee' */
 
 /**
- * @template T
- * @param {string} filepath
- * @param {(doc: Document<T>) => Array<[ any, any ]>|Iterable<[ any, any ]>|undefined} fn
- * @param {Array<string>} filterKeyList
- * @param {AbortSignal} signal
+ * @typedef {Object} ArmoireOptions
+ * @property {number|undefined} [threadCount]
  */
-async function processFilePath(filepath, fn, filterKeyList, signal) {
-	// console.log('mapping over', entry.name)
-	const json = await fs.readFile(filepath, { encoding: 'utf8', flag: 'r', signal })
-	const internalDoc = JSON.parse(json)
 
-	const id = internalDoc[SETTEE_INTERNAL_PROPERTIES.ID]
 
-	const keySet = await Promise.try(fn, internalDoc)
-		.catch(e => {
-			console.warn('error in mapFn', e.message)
-			return undefined
-		})
-
-	if(keySet === undefined) { return }
-
-	if(filterKeyList.length === 0) {
-		return [ id, keySet ]
-	}
-
-	const filteredKeySet = [ ...keySet ].filter(item => filterKeyList.includes(item[0]))
-	return [ id, filteredKeySet ]
+export const CONTROL_MESSAGE = {
+	FILE: 'file',
+	END: 'end'
 }
+
+export const WORKER_MESSAGE = {
+	READY: 'ready',
+	RESULT: 'result',
+	FAIL: 'fail',
+	ERROR: 'error'
+}
+
+export const DEFAULT_THREAD_COUNT = 4
+
+export const DIRECTORY_BUFFER_SIZE = 64
 
 export class Armoire {
 	/**
-	 * @param {Array<string>} filterKeys
-	 * @param {SetteeOptions} options
+	 * @param {string} viewName
+	 * @param {Array<string>|undefined} [filterKeys]
+	 * @param {(SetteeOptions & ArmoireOptions)|undefined} [options]
 	 */
-	static async map(filterKeys, options) {
+	static async map(viewName, filterKeys, options) {
 		const { documentsRoot, signal } = fromOptions(options)
+		const threadCount = options?.threadCount ?? DEFAULT_THREAD_COUNT
 
-		const url = new URL('./armoire.js', import.meta.url)
+		const url = new URL(import.meta.url)
 
-		const length = 8
-		const workers = Array.from({ length }, (_, index) => {
-			return new Worker(url, { name: 'Armoire', workerData: index })
+		const workers = Array.from({ length: threadCount }, (_, index) => {
+			return new Worker(url, { name: `Armoire#${index}`, workerData: { index, viewName, options } })
 		})
 
 		const results = new Map()
 		let total_count = 0
 		const { promise, resolve, reject } = Promise.withResolvers()
 
-		const dir = await fs.opendir(documentsRoot, { bufferSize: 32, encoding: 'utf8' })
+		const dir = await fs.opendir(documentsRoot, { bufferSize: DIRECTORY_BUFFER_SIZE, encoding: SETTEE_DEFAULT.FILE_ENCODING })
 		const iterator = dir[Symbol.asyncIterator]()
 
 		const next = async () => {
 			while(true) {
-				// 	signal?.throwIfAborted()
+				// signal?.throwIfAborted()
+				if(signal.aborted) {
+					// console.log('reject next on signal')
+					reject(new Error(signal.reason))
+				}
+
 				const { done, value } = await iterator.next()
-				if(done === undefined || done || signal.aborted) {
-					for(const worker of workers) { worker.postMessage({ type: 'end' }) }
-					resolve(results)
-					// await dir.close()
+				if(done === undefined || done) {
 					return undefined
 				}
 
 				if(!value.isFile()) { continue }
-				if(value.name.startsWith('.')) { continue }
+				if(value.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
 
 				total_count += 1
 				return path.normalize(path.join(value.parentPath, value.name))
 			}
 		}
 
+		let remainingWorkers = threadCount
+
 		for(const worker of workers) {
+			worker.on('exit', () => {
+				remainingWorkers -= 1
+				// console.log('worker exited', remainingWorkers)
+				if(remainingWorkers === 0) {
+					resolve(results)
+				}
+			})
+
 			worker.on('message', async message => {
 				const { type } = message
 
-				if(type === 'ready') {
+				if(type === WORKER_MESSAGE.READY) {
 					const filepath = await next()
 					if(filepath === undefined) {
+						worker.postMessage({ type: CONTROL_MESSAGE.END })
 						return
 					}
 
-					worker.postMessage({ type: 'file', filepath, filterKeys })
+					worker.postMessage({ type: CONTROL_MESSAGE.FILE, filepath, filterKeys })
 				}
-				else if(type === 'result') {
+				else if(type === WORKER_MESSAGE.RESULT) {
 					const { result } = message
 					const [ key, value ] = result
 
 					results.set(key, value)
 				}
-				else if(type === 'fail') {
+				else if(type === WORKER_MESSAGE.FAIL) {
 					console.log('fail', message)
+				}
+				else if(type === WORKER_MESSAGE.ERROR) {
+					reject(message.error)
 				}
 				else {
 					console.warn('unknown message type from worker', type)
@@ -128,33 +123,38 @@ export class Armoire {
 			.then(result => {
 				return formatResults(result, total_count)
 			})
+			.finally(() => {
+				for(const worker of workers) {
+					worker.terminate()
+				}
+			})
 	}
 
 	/**
-	 * @template T
+	 * @template T, K, V
 	 * @param {{ type: string, filepath: string, filterKeys: Array<string>}} message
-	 * @param {(doc: Document<T>) => Array<[ any, any ]>|Iterable<[ any, any ]>|undefined} mapFn
+	 * @param {ViewFunction<T, K, V>} mapFn
 	 */
 	static async handleMessage(message, mapFn) {
 		const { type } = message
 
-		if(type === 'end') {
+		if(type === CONTROL_MESSAGE.END) {
 			parentPort?.close()
 		}
-		else if(type === 'file') {
+		else if(type === CONTROL_MESSAGE.FILE) {
 			const { filepath, filterKeys } = message
 			await processFilePath(filepath, mapFn, filterKeys, AbortSignal.timeout(1_000))
 				.then(result => {
 					if(result === undefined) { return }
-					if(result.length === 0) { return }
-					parentPort?.postMessage({ type: 'result', filepath, result })
+					if(result.length !== 2) { return }
+					parentPort?.postMessage({ type: WORKER_MESSAGE.RESULT, filepath, result })
 				})
 				.catch(e => {
 					// console.log('process failed for', filepath, e.message)
-					parentPort?.postMessage({ type: 'fail', filepath, message: e.message })
+					parentPort?.postMessage({ type: WORKER_MESSAGE.FAIL, filepath, message: e.message })
 				})
 
-			parentPort?.postMessage({ type: 'ready' })
+			parentPort?.postMessage({ type: WORKER_MESSAGE.READY })
 		}
 		else {
 			console.warn('unknown message type for parent', type)
@@ -162,21 +162,14 @@ export class Armoire {
 	}
 }
 
-// if(!isMainThread) {
-// 	const { default: mapFn } = await import('../_by_color.js')
-// 	parentPort?.on('message', message => Armoire.handleMessage(message, mapFn))
-// 	parentPort?.postMessage({ type: 'ready' })
-// }
-// else {
-// 	const start = performance.now()
-// 	const result = await Armoire.map([ 'pink', 'yellow' ], {
-// 		documentsRoot: 'data/color/docs',
-// 		internal_signal: AbortSignal.timeout(30 * 1_000)
-// 	})
-
-// 	const delta = performance.now() - start
-// 	console.log(result.total_count)
-// 	console.log(result.rows.length)
-// 	console.log(result.rows[0])
-// 	console.log(delta / 1000)
-// }
+if(!isMainThread) {
+	await importView(workerData.viewName, workerData.options)
+		.then(mapFn => {
+			parentPort?.on('message', message => Armoire.handleMessage(message, mapFn))
+			parentPort?.postMessage({ type: WORKER_MESSAGE.READY, name: threadName })
+		})
+		.catch(e => {
+			parentPort?.postMessage({ type: WORKER_MESSAGE.ERROR, error: e })
+			parentPort?.close()
+		})
+}
