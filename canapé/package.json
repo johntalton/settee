@@ -1,0 +1,12 @@
+{
+  "name": "@johntalton/canape",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node --permission --no-warnings --allow-net  --allow-worker --allow-fs-read=package.json --allow-fs-read=./certificates/* --allow-fs-read=../settee/* --allow-fs-read=../node_modules/* --allow-fs-read=./src --allow-fs-read=.env --allow-fs-read=../data --allow-fs-write=../data/*  --env-file=.env ./src/index.js"
+  },
+  "dependencies": {
+    "@johntalton/http-util": "^1.0.1",
+    "@johntalton/settee": "^1.0.0"
+  }
+}

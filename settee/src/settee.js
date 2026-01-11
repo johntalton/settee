@@ -1,6 +1,8 @@
-import * as fs from 'node:fs/promises'
-import * as path from 'node:path'
-import * as crypto from 'node:crypto'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import crypto from 'node:crypto'
+
+import { Chifforobe } from './chifforobe.js'
 
 /** @typedef {string & { readonly _brand: 'id' }} DocId */
 /** @typedef {string & { readonly _brand: 'rev' }} RevisionId */
@@ -36,6 +38,21 @@ import * as crypto from 'node:crypto'
  * @template K, V
  * @typedef {Array<[ K, V ]>|Iterable<[ K, V ]>} ViewFunctionResult
 */
+
+/**
+ * @template K, V
+ * @typedef {Object} ViewFunctionRowResultItem
+ * @property {DocId} id
+ * @property {K} key
+ * @property {V} value
+ */
+
+/**
+ * @template K, V
+ * @typedef {Object} ViewFunctionRowResult
+ * @property {number} total_count
+ * @property {Array<ViewFunctionRowResultItem<K, V>>} rows
+ */
 
 /**
  * @template D, K, V
@@ -122,7 +139,7 @@ export function fromOptions(options) {
 }
 
 /**
- * @param {string} id
+ * @param {string|undefined} id
  * @returns {id is DocId}
  */
 export function isValidDocId(id) {
@@ -132,7 +149,7 @@ export function isValidDocId(id) {
 }
 
 /**
- * @param {string} id
+ * @param {string|undefined} id
  * @returns {id is RevisionId}
  */
 export function isValidRevisionId(id) {
@@ -147,7 +164,7 @@ export function isValidRevisionId(id) {
  */
 export function pathFromId(documentsRoot, id) {
 	if(id.includes(path.sep)) { throw new Error('invalid id (sep)') }
-	if(id.includes(path.delimiter)) { throw new Error('invalid id (delimiter)') }
+	// if(id.includes(path.delimiter)) { throw new Error('invalid id (delimiter)') }
 
 	return path.normalize(path.format({
 		dir: documentsRoot,
@@ -203,6 +220,7 @@ export async function internalDocFrom(id, doc, digestAlgo) {
 export async function internalDocHasIntegrity(doc, digestAlgo) {
 	const revision = doc[SETTEE_INTERNAL_PROPERTIES.REVISION]
 	const computedRevision = await revisionFrom(doc, digestAlgo)
+
 	return computedRevision === revision
 }
 
@@ -270,12 +288,13 @@ export async function processFilePath(filepath, fn, filterKeyList, signal) {
  * @template K, V
  * @param {Map<DocId, ViewFunctionResult<K, V>>} result
  * @param {number} total_count
+ * @returns {ViewFunctionRowResult<K, V>}
  */
 export function formatResults(result, total_count) {
 	const output = result
 		.entries()
 		.filter(entry => entry[1] !== undefined)
-		.map(entry => [ ...entry[1] ].map(item => ({ [SETTEE_INTERNAL_PROPERTIES.ID]: entry[0], key: item[0], value: item[1] })))
+		.map(entry => [ ...entry[1] ].map(item => ({ id: entry[0], key: item[0], value: item[1] })))
 		.reduce((accumulator, value) => {
 			value.forEach(element => {
 				accumulator.push(element)
@@ -440,23 +459,30 @@ export class Settee {
 	}
 
 	/**
-	 * @template T
+	 * @template K, V
 	 * @param {string} viewName
 	 * @param {string|Array<string>|undefined} [filterKey]
 	 * @param {SetteeOptions|undefined} [options]
+	 * @returns {Promise<ViewFunctionRowResult<K,V>>}
 	 */
 	static async map(viewName, filterKey, options) {
 		const {
 			documentsRoot,
-			viewsRoot,
 			signal
 		} = fromOptions(options)
+
+		const cachedResult = await Chifforobe.load(viewName,  { ...options, internal_signal: signal })
+		if(cachedResult !== undefined) {
+			const result = new Map(cachedResult)
+			const total_count = cachedResult.length
+			return formatResults(result, total_count)
+		}
 
 		const fn = await importView(viewName, { ...options, internal_signal: signal })
 
 		const filterKeyList = filterKey === undefined ? [] : Array.isArray(filterKey) ? filterKey : [ filterKey ]
 
-		/** @type Map<DocId, ViewFunctionResult<any, any>> */
+		/** @type Map<DocId, ViewFunctionResult<K, V>> */
 		const result = new Map()
 		let total_count = 0
 
@@ -485,6 +511,8 @@ export class Settee {
 					console.warn('process Dirent error', entry.name, e.message)
 				})
 		}
+
+		await Chifforobe.store(viewName, result, { ...options, internal_signal: signal })
 
 		return formatResults(result, total_count)
 	}

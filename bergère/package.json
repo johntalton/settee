@@ -1,0 +1,12 @@
+{
+  "name": "@johntalton/bergere",
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "http-server  --cors -b -g -S -C ./certificates/bergere.next.local-cert.pem -K ./certificates/bergere.next.local-privkey.pem ./public",
+    "mkcert": "openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subj '/CN=bergere.next.local' -keyout ./certificates/bergere.next.local-privkey.pem -out ./certificates/bergere.next.local-cert.pem"
+  },
+  "dependencies": {
+    "http-server": "^14.1.1"
+  }
+}

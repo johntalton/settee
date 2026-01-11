@@ -10,7 +10,7 @@ import {
 	processFilePath
 } from '@johntalton/settee'
 
-/** @import { SetteeOptions, ViewFunction } from '@johntalton/settee' */
+/** @import { SetteeOptions, ViewFunction, ViewFunctionRowResult } from '@johntalton/settee' */
 
 /**
  * @typedef {Object} ArmoireOptions
@@ -36,9 +36,11 @@ export const DIRECTORY_BUFFER_SIZE = 64
 
 export class Armoire {
 	/**
+	 * @template K, V
 	 * @param {string} viewName
 	 * @param {Array<string>|undefined} [filterKeys]
 	 * @param {(SetteeOptions & ArmoireOptions)|undefined} [options]
+	 * @returns {Promise<ViewFunctionRowResult<K, V>>}
 	 */
 	static async map(viewName, filterKeys, options) {
 		const { documentsRoot, signal } = fromOptions(options)
@@ -163,6 +165,7 @@ export class Armoire {
 }
 
 if(!isMainThread) {
+	console.log('Starting Worker')
 	await importView(workerData.viewName, workerData.options)
 		.then(mapFn => {
 			parentPort?.on('message', message => Armoire.handleMessage(message, mapFn))
