@@ -7,56 +7,226 @@
 		<meta content="light dark" name="color-scheme" />
 		<meta name="referrer" content="same-origin" />
 
+		<meta name="mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+		<meta name="apple-mobile-web-app-title" content="Bergère">
+		<!-- <link rel="apple-touch-icon" href="apple-touch-icon.png"> -->
+
 		<meta http-equiv="content-security-policy" content="
 				default-src 'self';
-				script-src 'self';
+				script-src 'self' 'sha256-ZiJddmit55D4Tdj48NM8tttXbQ+tXv7idYW8U/7kUEM=';
 				connect-src canape.next.local:6095
 				" />
 
 		<title>Bergère</title>
 		<meta name="description" content="Bergere" />
 
+		<script type="importmap">
+			{
+				"imports": {
+					"@johntalton/json-tokenizer": "/shared/@johntalton/json-tokenizer/src/index.js"
+				}
+			}
+		</script>
+
+		<!-- <link re="manifest" href="manifest.json" /> -->
 		<link rel="icon" type="image/svg+xml" href="./favicon.svg" />
 		<link rel="stylesheet" type="text/css" href="./index.css" />
 		<script async defer type="module" src="./index.js"></script>
 	</head>
 
-	<body data-theme="two">
+	<body id="Body" data-theme="one">
+		<dialog id="CreateNewDB">
+			<form id="CreateNewDBForm" method="dialog">
+				<fieldset>
+					<label>
+						<span>Database Name:</span>
+						<input name="name" type="text" placeholder="database name" required minLength="3" />
+					</label>
+					<label>
+						<span>Digest Algorithm</span>
+						<select name="digestAlgo">
+							<!-- <option value="md5">MD5</option> -->
+							<option value="SHA-1" selected>SHA-1</option>
+							<option value="SHA-256">SHA-256</option>
+							<option value="SHA-384">SHA-384</option>
+							<option value="SHA-512">SHA-512</option>
+							<!-- <option value="SHA3-256">SHA3-256</option> -->
+							<!-- <option value="SHA3-384">SHA3-384</option> -->
+							<!-- <option value="SHA3-512">SHA3-512</option> -->
+						</select>
+					</label>
+				</fieldset>
+				<button-set>
+					<button type="reset" class="Action">Cancel</button>
+					<button type="submit" class="Action">Ok</button>
+				</button-set>
+			</form>
+		</dialog>
+
+		<dialog id="CreateNewDocument">
+			<form id="CreateNewDocumentForm" method="dialog">
+				<fieldset>
+					<label>
+						<span>Document ID</span>
+						<input name="documentId" placeholder="document id" required>
+					</label>
+					<label>
+						<span>Auto Generate</span>
+						<input name="autoId" type="checkbox" />
+					</label>
+					<label>
+						<span>Generation Algorithm</span>
+						<select name="generationAlgo">
+							<option>UUID</option>
+						</select>
+					</label>
+				</fieldset>
+				<button-set>
+					<button type="reset" class="Action">Cancel</button>
+					<button type="submit" class="Action">Ok</button>
+				</button-set>
+			</form>
+		</dialog>
+
 		<header>
+			<img src="./icons/chair.svg" alt="Bergere Chair" />
 			<h1>Bergère</h1>
 		</header>
+		<dialog id="Toast" class="Warn">
+			<img src="./icons/warning.svg" atl="Warning" class="Warn" />
+			<img src="./icons/error.svg" atl="Error" class="Error" />
+			<p id="ToastMessage" data-message>
+				 <!-- Lorem ipsum dolor sit amet consectetur adipisicing elit. Iure quisquam reiciendis autem quam? Voluptate tempora sapiente veniam? Suscipit nihil perspiciatis delectus hic, sit numquam, cupiditate ducimus vero, totam ratione dicta. -->
+				this is a test
+			</p>
+			<button commandFor="Toast" command="close">
+				<img src="./icons/close-small.svg" atl="close" />
+			</button>
+		</dialog>
 		<aside>
-			<div>
-				<img src="./icons/menu.svg" /><span>Menu</span>
-			</div>
-			<nav>
+			<button id="ToggleMenu" type="button" commandFor="Body" command="--toggle-aside">
+				<img src="./icons/menu.svg" alt="Toggle Menu" />
+				<span>Menu</span>
+			</button>
+			<nav id="MainNav">
 				<ul>
-					<li>
-						<img src="./icons/database.svg" /> Databases
+					<li data-for-section="listing">
+						<a href="#listing">
+							<img src="./icons/database.svg" alt="database" />
+							<span>Databases</span>
+						</a>
 					</li>
-					<li>
-						<img src="./icons/settings.svg" /> Settings
-					</li>
-					<li>
-						<img src="./icons/settings.svg" /> Settings
-					</li>
-					<li>
-						<img src="./icons/settings.svg" /> Settings
-					</li>
-					<li>
-						<img src="./icons/settings.svg" /> Settings
-					</li>
-					<li>
-						<img src="./icons/settings.svg" /> Settings
-					</li>
-					<li>
-						<img src="./icons/settings.svg" /> Settings
+					<li data-for-section="settings">
+						<a href="#settings">
+							<img src="./icons/settings.svg" alt="settings" />
+							<span>Settings</span>
+						</a>
 					</li>
 				</ul>
 			</nav>
 		</aside>
 		<main>
+			<section data-name="progress">
+				<!-- <progress id="LoadingDBListing" value="0" min="0" max="100"></progress> -->
+				<img src="./icons/progress.svg" alt="progress" class="SectionMain" />
+			</section>
+			<section data-name="document">
+				<div class="SectionHeader">
+					<div class="Breadcrumb">
+						<output name="Breadcrumb"></output>
+					</div>
 
+					<button-set>
+						<button class="Action" type="button" commandFor="DocumentContainer" command="--save-document">
+							<img src="./icons/upload.svg" alt="Save Document" />
+							Save
+						</button>
+						<button disabled class="Action" type="button" commandFor="DocumentContainer" command="--delete-document">
+							<img src="./icons/trash.svg" alt="Delete Document" />
+							Remove
+						</button>
+					</button-set>
+				</div>
+
+				<div id="DocumentContainer" class="SectionMain">
+					<canvas id="JSONEditor" height="10" width="10" contenteditable="true" spellcheck="true"></canvas>
+					<pre id="FallbackView">
+						<code>
+							<output name="documentView"></output>
+						</code>
+					</pre>
+				</div>
+			</section>
+			<section data-name="documents">
+				<div class="SectionHeader">
+					<div class="Breadcrumb">
+						<output name="Breadcrumb"></output>
+					</div>
+
+					<button id="NewDocument" class="Action" type="button" commandFor="CreateNewDocument" command="show-modal">
+						<img src="./icons/add.svg" alt="new" />
+						New Document
+					</button>
+				</div>
+				<div class="SectionMain">
+					<div class="SectionMainHeader">
+						<search>
+							<form id="DocumentsListSearch" method="dialog">
+								<label>
+									<span>Search</span>
+									<input type="search" placeholder="search" />
+								</label>
+							</form>
+						</search>
+						<form id="DocumentsListOptions" method="dialog">
+							<label>
+								<span>Select View</span>
+								<select name="ViewSelection" disabled>
+									<!-- -->
+								</select>
+							</label>
+						</form>
+					</div>
+					<ul id="DocumentsList">
+						<p data-empty-list>No Documents Found</p>
+						<template>
+							<li data-documentId="">
+								<a href="">
+									<img src="./icons/article.svg" alt="Document" />
+									<output name="DocumentId"></output>
+									<output name="ViewKey"></output>
+									<output name="ViewValue"></output>
+								</a>
+							</li>
+						</template>
+					</ul>
+				</div>
+			</section>
+			<section data-name="listing">
+				<div class="SectionHeader">
+					<div class="Breadcrumb">
+						<output name="Breadcrumb"></output>
+					</div>
+
+					<button id="NewDB" class="Action" type="button" commandFor="CreateNewDB" command="show-modal">
+						<img src="./icons/add.svg" alt="new" />
+						New Database
+					</button>
+				</div>
+				<ul id="DBListing" class="SectionMain" data-style="cardView">
+					<template>
+						<li data-database-name="">
+							<a href="">
+								<label inert><span>DB:</span><output name="databaseName">-</output></label>
+								<label inert><span>Count:</span><output name="count">-</output></label>
+								<label inert><span>Size:</span><output name="size">-</output></label>
+								<label inert><span>Digest:</span><output name="digest">-</output></label>
+							 </a>
+						</li>
+					</template>
+				</ul>
+			</section>
 		</main>
 		<footer>
 			Copyright 2026

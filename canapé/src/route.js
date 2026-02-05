@@ -1,82 +1,107 @@
-import http2 from 'node:http2'
+import { isValidMethod } from './index.js'
 
-const {
-	HTTP2_HEADER_METHOD
-} = http2.constants
 
-/** @typedef {'request'|'json'|'404'|'sse'|'abort'|'unsupported'|'error'|'preflight'|'limit'} RouteResultType */
-
-/**
- * @typedef {Object} RouteResult
- * @property {RouteResultType} type
- * @property {Record<any, any>|undefined} [obj]
- */
-
-/** @typedef {(matches: Record<string, string|undefined>, query: URLSearchParams) => Promise<RouteResult>} RouteMethod */
+/** @import { RouteRequest, RouteFunction, RouteAction, RoutePreflight, RouteMethod } from './index.js' */
 
 /**
  * @typedef {Object} RouteItem
  * @property {URLPattern} pattern
- * @property {Record<string, RouteMethod>} methods
+ * @property {Record<string|RouteMethod, RouteFunction>} methods
  */
 
 /** @typedef {Array<RouteItem>} Routes */
 
 /**
+ * @param {RouteItem} route
+ * @return {Array<RouteMethod>}
+ */
+function methodFromRoute(route) {
+	return Object.keys(route.methods)
+		.map(method => isValidMethod(method) ? method : undefined)
+		.filter(method => method !== undefined)
+}
+
+/**
  * @param {Routes} routes
- * @param {RouteResult} state
- * @returns {Promise<RouteResult>}
+ * @param {RoutePreflight} state
+ * @returns {RouteAction}
+ */
+function routeOptions(routes, state) {
+	const {
+		method,
+		url,
+		shutdownSignal
+	} = state
+
+	for(const route of routes) {
+		if(shutdownSignal.aborted) { return { ...state, type: 'error', cause: `shutdown during options routing (${shutdownSignal.reason})` } }
+
+		const matches = route.pattern.exec(url)
+		if(matches === null || matches === undefined) { continue }
+
+		const methods = methodFromRoute(route)
+
+		return {
+			...state,
+			type: 'preflight',
+			methods
+		}
+	}
+
+	return { ...state, type: '404', method, url, message: 'options route not found' }
+}
+
+
+/**
+ * @param {Routes} routes
+ * @param {RouteRequest|RouteAction} state
+ * @returns {Promise<RouteAction>}
  */
 export async function route(routes, state) {
 	const routeStart = performance.now()
 
 	const {
 		type,
-		stream,
-		method,
-		url,
-		body,
-		accept,
-		meta,
 		shutdownSignal,
 	} = state
 
-	const defaultReturn = {
-		stream,
-		meta,
-		shutdownSignal
-	}
+	if(type === 'preflight') { return routeOptions(routes, state) }
+	if(type !== 'request') { return state }
 
-	if(type !== 'request') { return { type: 'error', cause: `unknown type ${type}`, ...defaultReturn  } }
+	const {
+		method,
+		url
+	} = state
 
 	for(const route of routes) {
-		if(shutdownSignal.aborted) { return { type: 'abort', method, url, ...defaultReturn } }
+		if(shutdownSignal.aborted) { return { ...state, type: 'error', cause: `shutdown during routing (${shutdownSignal.reason})` } }
 
 		const matches = route.pattern.exec(url)
 		if(matches === null || matches === undefined) { continue }
 
 		const fn = route.methods[method]
-		if(fn === undefined) { return { type: 'unsupported', method, url, ...defaultReturn } }
+		if(fn === undefined) {
+			const methods = methodFromRoute(route)
+			return { ...state, type: 'not-allowed', method, methods, url }
+		}
 
-		defaultReturn.meta.performance.push({
+		state.meta.performance.push({
 			name: 'route', duration: performance.now() - routeStart
 		})
 
 		const handlerStart = performance.now()
-		const result = await fn(matches.pathname.groups, state)
+		const result = await Promise.try(fn, matches.pathname.groups, state)
+			.catch(e => {
+				throw new Error('Route function error', { cause: e })
+			})
 		const handlerDelta = performance.now() - handlerStart
 
-		defaultReturn.meta.performance.push({
+		state.meta.performance.push({
 			name: 'handler', duration: handlerDelta
 		})
 
-		return {
-			type: 'json',
-			accept,
-			...result,
-			...defaultReturn
-		}
+		return result
 	}
 
-	return { type: '404', method, url, ...defaultReturn }
+	return { ...state, type: '404', method, url, message: 'route not found' }
 }

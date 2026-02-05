@@ -1,7 +1,10 @@
 {
   "name": "settee-workspace",
-  "type":"module",
-  "workspaces":[
-    "settee", "canapé", "bergère"
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "settee",
+    "canapé",
+    "bergère"
   ]
 }

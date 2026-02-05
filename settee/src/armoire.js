@@ -38,7 +38,7 @@ export class Armoire {
 	/**
 	 * @template K, V
 	 * @param {string} viewName
-	 * @param {Array<string>|undefined} [filterKeys]
+	 * @param {Array<K>|undefined} [filterKeys]
 	 * @param {(SetteeOptions & ArmoireOptions)|undefined} [options]
 	 * @returns {Promise<ViewFunctionRowResult<K, V>>}
 	 */
@@ -101,7 +101,7 @@ export class Armoire {
 						return
 					}
 
-					worker.postMessage({ type: CONTROL_MESSAGE.FILE, filepath, filterKeys })
+					worker.postMessage({ type: CONTROL_MESSAGE.FILE, filepath })
 				}
 				else if(type === WORKER_MESSAGE.RESULT) {
 					const { result } = message
@@ -121,9 +121,11 @@ export class Armoire {
 			})
 		}
 
+		const filterKeyList = filterKeys !== undefined ? Array.isArray(filterKeys) ? filterKeys : [ filterKeys ] : []
+
 		return promise
 			.then(result => {
-				return formatResults(result, total_count)
+				return formatResults(result, total_count, filterKeyList)
 			})
 			.finally(() => {
 				for(const worker of workers) {
@@ -144,15 +146,15 @@ export class Armoire {
 			parentPort?.close()
 		}
 		else if(type === CONTROL_MESSAGE.FILE) {
-			const { filepath, filterKeys } = message
-			await processFilePath(filepath, mapFn, filterKeys, AbortSignal.timeout(1_000))
+			const { filepath } = message
+			await processFilePath(filepath, mapFn, [], AbortSignal.timeout(1_000))
 				.then(result => {
 					if(result === undefined) { return }
 					if(result.length !== 2) { return }
 					parentPort?.postMessage({ type: WORKER_MESSAGE.RESULT, filepath, result })
 				})
 				.catch(e => {
-					// console.log('process failed for', filepath, e.message)
+					// console.log('process failed for', filepath, e)
 					parentPort?.postMessage({ type: WORKER_MESSAGE.FAIL, filepath, message: e.message })
 				})
 

@@ -4,10 +4,14 @@ import crypto from 'node:crypto'
 
 import { Chifforobe } from './chifforobe.js'
 
+/** @import { Dirent } from 'node:fs' */
+
 /** @typedef {string & { readonly _brand: 'id' }} DocId */
 /** @typedef {string & { readonly _brand: 'rev' }} RevisionId */
 
-/** @typedef {crypto.webcrypto.Algorithm|string} DigestAlgorithm */
+/** @typedef {'SHA-1'|'SHA-256'|'SHA-384'|'SHA-512'} KnownDigestAlgorithm */
+
+/** @typedef {crypto.webcrypto.Algorithm|KnownDigestAlgorithm|string} DigestAlgorithm */
 
 /**
  * @typedef {Object} SetteeOptionsResolved
@@ -28,7 +32,8 @@ import { Chifforobe } from './chifforobe.js'
 
 /** @typedef {Partial<SetteeOptionsResolved> & Partial<SetteeConstructionOptions>} SetteeOptions */
 
-/** @typedef {{ [SETTEE_INTERNAL_PROPERTIES.ID]: string,  [SETTEE_INTERNAL_PROPERTIES.REVISION]: string }} DocumentBase */
+
+/** @typedef {{ [SETTEE_INTERNAL_PROPERTIES.ID]: DocId,  [SETTEE_INTERNAL_PROPERTIES.REVISION]: RevisionId }} DocumentBase */
 /**
  * @template T
  * @typedef {DocumentBase & T } Document
@@ -59,12 +64,14 @@ import { Chifforobe } from './chifforobe.js'
  * @typedef {(doc: Document<D>) => ViewFunctionResult<K, V>|undefined} ViewFunction
  */
 
+
 export const SETTEE_ENV = {
 	DB_ROOT: 'SETTEE_DB',
 	DOCUMENTS_DIRECTORY: 'SETTEE_DOCS_DIR',
 	VIEWS_DIRECTORY: 'SETTEE_VIEWS_DIR',
 	TIMEOUT_MS: 'SETTEE_TIMEOUT_MS',
-	DIGEST_ALGO: 'SETTEE_DIGEST_ALGORITHM'
+	DIGEST_ALGO: 'SETTEE_DIGEST_ALGORITHM',
+	NEW_DATABASE_ROOT: 'SETTEE_NEW_DB'
 }
 
 export const SETTEE_DEFAULT = {
@@ -91,7 +98,6 @@ export const FILE_FLAGS = {
 	DOC_UPDATE: 'w',
 	MAP_PROCESS: 'r'
 }
-
 export const FILE_MODE = 0o600
 
 export const SETTEE_INTERNAL_PROPERTIES = {
@@ -106,23 +112,49 @@ const ENV_DOCS_DIR = process.env[SETTEE_ENV.DOCUMENTS_DIRECTORY] ?? SETTEE_DEFAU
 const ENV_VIEWS_DIR = process.env[SETTEE_ENV.VIEWS_DIRECTORY] ?? SETTEE_DEFAULT.VIEWS
 const ENV_TIMEOUT_MS = parseInt(process.env[SETTEE_ENV.TIMEOUT_MS] ?? SETTEE_DEFAULT.TIMEOUT_MS, 10)
 const ENV_DIGEST_ALGO = process.env[SETTEE_ENV.DIGEST_ALGO] ?? SETTEE_DEFAULT.DIGEST_ALGO
+const ENV_NEW_DB_DIR = process.env[SETTEE_ENV.NEW_DATABASE_ROOT]
 
 /**
  * @param {SetteeOptions|undefined} [options]
- * @returns {SetteeOptionsResolved}
+ * @param {string} [resolverPrefix=SETTEE_DEFAULT.RESOLVE_PREFIX]
+ * @returns {SetteeConstructionOptions & Omit<SetteeOptionsResolved, 'signal'>}
  */
-export function fromOptions(options) {
+export function fromOptionsResolved(options, resolverPrefix = SETTEE_DEFAULT.RESOLVE_PREFIX) {
 	const db = options?.db ?? ENV_DB_DIR
 	const documentsDir = options?.documentsDir ?? ENV_DOCS_DIR
 	const viewsDir = options?.viewsDir ?? ENV_VIEWS_DIR
 	const timeoutMs = options?.timeoutMs ?? ENV_TIMEOUT_MS
 	const digestAlgo = options?.digestAlgo ?? ENV_DIGEST_ALGO
 
-	const documentsRoot = path.resolve(SETTEE_DEFAULT.RESOLVE_PREFIX, options?.documentsRoot ?? path.join(db, documentsDir))
-	const viewsRoot = path.resolve(SETTEE_DEFAULT.RESOLVE_PREFIX, options?.viewsRoot ?? path.join(db, viewsDir))
+	const documentsRoot = path.resolve(resolverPrefix, options?.documentsRoot ?? path.join(db, documentsDir))
+	const viewsRoot = path.resolve(resolverPrefix, options?.viewsRoot ?? path.join(db, viewsDir))
 
 	if(Number.isFinite(timeoutMs)) {}
 	if(timeoutMs <= 0) {}
+
+	return {
+		db,
+		documentsDir,
+		viewsDir,
+		timeoutMs,
+		digestAlgo,
+		documentsRoot,
+		viewsRoot
+	}
+}
+
+/**
+ * @param {SetteeOptions|undefined} [options]
+ * @param {string|undefined} [resolverPrefix]
+ * @returns {SetteeOptionsResolved}
+ */
+export function fromOptions(options, resolverPrefix) {
+	const {
+		documentsRoot,
+		viewsRoot,
+		digestAlgo,
+		timeoutMs
+	} = fromOptionsResolved(options, resolverPrefix)
 
 	// if we have an internal signal, use that, otherwise
 	//  combined optional signal with timeout or just timeout
@@ -224,6 +256,21 @@ export async function internalDocHasIntegrity(doc, digestAlgo) {
 	return computedRevision === revision
 }
 
+/**
+ * @param {string} viewName
+ * @param {SetteeOptions|undefined} [options]
+ */
+export function pathFromView(viewName, options) {
+	const {
+		viewsRoot
+	} = fromOptions(options)
+
+	return path.format({
+		dir: viewsRoot,
+		name: viewName,
+		ext: SETTEE_DEFAULT.VIEW_EXTENSION
+	})
+}
 
 /**
  * @template D, K, V
@@ -232,15 +279,7 @@ export async function internalDocHasIntegrity(doc, digestAlgo) {
  * @returns {Promise<ViewFunction<D, K, V>>}
  */
 export async function importView(viewName, options) {
-	const {
-		viewsRoot
-	} = fromOptions(options)
-
-	const viewPath = path.format({
-		dir: viewsRoot,
-		name: viewName,
-		ext: SETTEE_DEFAULT.VIEW_EXTENSION
-	})
+	const viewPath = pathFromView(viewName, options)
 
 	const mod = await import(viewPath)
 	// 	.catch(e => {
@@ -263,7 +302,7 @@ export async function importView(viewName, options) {
  * @template D, K, V
  * @param {string} filepath
  * @param {(doc: Document<D>) => ViewFunctionResult<K, V>|undefined} fn
- * @param {Array<string>} filterKeyList
+ * @param {Array<K>} filterKeyList
  * @param {AbortSignal} signal
  * @returns {Promise<[ DocId, ViewFunctionResult<K, V> ]|undefined>}
  */
@@ -277,7 +316,7 @@ export async function processFilePath(filepath, fn, filterKeyList, signal) {
 	if(keySet === undefined) { return }
 
 	if(filterKeyList === undefined || filterKeyList.length === 0) {
-		return [ id, keySet ]
+		return [ id, [ ...keySet ] ]
 	}
 
 	const filteredKeySet = [ ...keySet ].filter(item => filterKeyList.includes(item[0]))
@@ -288,17 +327,17 @@ export async function processFilePath(filepath, fn, filterKeyList, signal) {
  * @template K, V
  * @param {Map<DocId, ViewFunctionResult<K, V>>} result
  * @param {number} total_count
+ * @param {Array<K>} filterKeyList
  * @returns {ViewFunctionRowResult<K, V>}
  */
-export function formatResults(result, total_count) {
+export function formatResults(result, total_count, filterKeyList) {
 	const output = result
 		.entries()
 		.filter(entry => entry[1] !== undefined)
-		.map(entry => [ ...entry[1] ].map(item => ({ id: entry[0], key: item[0], value: item[1] })))
+		.map(([ docId, result ]) => [ ...result ].map(item => ({ id: docId, key: item[0], value: item[1] })))
 		.reduce((accumulator, value) => {
-			value.forEach(element => {
-				accumulator.push(element)
-			})
+			const filterValue = filterKeyList.length !== 0 ? value.filter(element => filterKeyList.includes(element.key)) : value
+			accumulator.push(...filterValue)
 
 			return accumulator
 		}, [])
@@ -317,16 +356,186 @@ export class Settee {
 		} = fromOptions(options)
 
 		try {
-			const watcher = fs.watch(documentsRoot, { signal })
+			await using watcher = fs.watch(documentsRoot, { encoding: SETTEE_DEFAULT.FILE_ENCODING, signal })
 
 			for await (const { eventType, filename } of watcher) {
 				//
 				console.log('watch:', eventType, filename)
+				if(filename === null) { continue }
+				const id = path.parse(filename).name
+
+				yield { eventType, id }
 			}
 		}
 		catch(e) {
 			// if(e.name === 'AbortError') { return }
 			throw e
+		}
+	}
+
+	/**
+	 * @param {string} name
+	 * @param {SetteeOptions|undefined} options
+	 */
+		static async createDatabase(name, options) {
+			if(name !== options?.db) {
+				throw new Error('name does not match options db')
+			}
+
+			const newDatabaseRoot = ENV_NEW_DB_DIR
+
+			const {
+				db,
+				documentsDir,
+				documentsRoot,
+				viewsDir,
+				viewsRoot,
+				digestAlgo
+			} = fromOptionsResolved(options, newDatabaseRoot)
+
+			if(newDatabaseRoot === undefined) { throw new Error('creation disabled') }
+
+			// todo getHashes returns inconsistent names for digest
+			// const validAlgorithms = crypto.getHashes()
+			// const algoName = (typeof digestAlgo === 'string') ? digestAlgo : digestAlgo.name
+			// if(!validAlgorithms.includes(algoName)) {
+			// 	console.log(digestAlgo, validAlgorithms)
+			// 	// throw new Error('unknown digest algorithm')
+			// }
+			try {
+				await revisionFrom({}, digestAlgo)
+			}
+			catch(e) {
+				throw new Error('Error in digest algorithm ', { cause: e })
+			}
+
+			await fs.access(newDatabaseRoot, fs.constants.F_OK)
+
+			const dbDir = path.resolve(newDatabaseRoot, db)
+
+			const exists = await fs.access(dbDir, fs.constants.F_OK)
+				.then(() => true)
+				.catch(() => false)
+
+			if(exists) { throw new Error('database with name already exists') }
+
+			console.log('create', { dbDir, documentsRoot, viewsRoot })
+
+			await fs.mkdir(dbDir, { mode: fs.constants.S_IRWXU })
+			await fs.mkdir(documentsRoot, { mode: fs.constants.S_IRWXU })
+			await fs.mkdir(viewsRoot, { mode: fs.constants.S_IRWXU })
+
+			const viewAllPath = path.join(viewsRoot, 'all.js')
+			const data = 'export default doc => [ [ doc[\'settee:id\'], 1 ] ]'
+
+			await fs.writeFile(viewAllPath, data, { encoding: SETTEE_DEFAULT.FILE_ENCODING, mode: FILE_MODE, flag: 'ax', flush: true})
+
+			return {
+				db: dbDir,
+				documentsDir,
+				viewsDir,
+				digestAlgo
+			}
+		}
+	/**
+	 * @param {SetteeOptions|undefined} options
+	 */
+	static async _info(options) {
+		const {
+			documentsRoot
+		} = fromOptions(options)
+
+		let total_count = 0
+		let size = 0
+
+		const iterator = await fs.opendir(documentsRoot, { bufferSize: 32, encoding: SETTEE_DEFAULT.FILE_ENCODING })
+		for await (const entry of iterator) {
+			if(!entry.isFile()) { continue }
+			if(entry.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
+
+			const stat = await fs.stat(path.join(documentsRoot, entry.name), { bigint: false })
+			size += stat.size
+			total_count += 1
+		}
+
+		return {
+			total_count,
+			size
+		}
+	}
+
+	/**
+	 * @param {SetteeOptions|undefined} options
+	 */
+	static async info(options) {
+		const {
+			documentsRoot,
+			signal
+		} = fromOptions(options)
+
+		let total_count = 0
+		let size = 0
+		let overallDone = false
+
+		using iterator = await fs.opendir(documentsRoot, { bufferSize: 64, encoding: SETTEE_DEFAULT.FILE_ENCODING })
+		const iter = iterator[Symbol.asyncIterator]()
+
+		/** @type {(entry: IteratorResult<Dirent<string>, undefined>) => Promise<void>} */
+		const process = async ({ done, value }) => {
+			if(done) { overallDone = true; return }
+			if(!value.isFile()) { return }
+			if(value.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { return }
+
+			return fs.stat(path.join(documentsRoot, value.name), { bigint: false })
+				.then(stat => {
+					total_count += 1
+					size += stat.size
+				})
+		}
+
+		while(!overallDone) {
+			signal.throwIfAborted()
+			const items = Array.from({ length: 64 }, () => iter.next().then(process))
+			await Promise.all(items)
+		}
+
+		return {
+			total_count,
+			size
+		}
+	}
+
+	/**
+	 * @param {SetteeOptions|undefined} options
+	 */
+	static async viewInfo(options) {
+		const {
+			viewsRoot,
+			signal
+		} = fromOptions(options)
+
+		using iterator = await fs.opendir(viewsRoot, { bufferSize: 64, encoding: SETTEE_DEFAULT.FILE_ENCODING })
+
+		const views = []
+		for await (const view of iterator) {
+			signal.throwIfAborted()
+
+			if(!view.isFile()) { continue }
+			if(view.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
+
+			const name = path.parse(view.name).name
+
+			const cache = await Chifforobe.info(name, options)
+
+
+			views.push({
+				name,
+				cache
+			})
+		}
+
+		return {
+			views
 		}
 	}
 
@@ -379,10 +588,14 @@ export class Settee {
 
 		const filepath = pathFromId(documentsRoot, id)
 
+		// const futureStats = fs.stat(filepath)
+
 		const json = await fs.readFile(filepath, { encoding: SETTEE_DEFAULT.FILE_ENCODING, flag: FILE_FLAGS.DOC_GET, signal })
 		const internalDoc = JSON.parse(json)
 		const valid = await internalDocHasIntegrity(internalDoc, digestAlgo)
 		if(!valid) { throw new Error('invalid integrity') }
+
+		// const { mtime } = await futureStats
 
 		return internalDoc
 	}
@@ -407,6 +620,12 @@ export class Settee {
 
 		return fs.writeFile(filepath, internalJson, { mode: FILE_MODE, flag: FILE_FLAGS.DOC_SET, encoding: SETTEE_DEFAULT.FILE_ENCODING, flush: true, signal })
 			.then(() => internalDoc)
+			.catch(error => {
+				if(error.code === 'EEXIST') {
+					throw new Error('Write Failure Already exists')
+				}
+				throw new Error('Write Failure', { cause: error })
+			})
 	}
 
 	/**
@@ -461,7 +680,7 @@ export class Settee {
 	/**
 	 * @template K, V
 	 * @param {string} viewName
-	 * @param {string|Array<string>|undefined} [filterKey]
+	 * @param {K|Array<K>|undefined} [filterKey]
 	 * @param {SetteeOptions|undefined} [options]
 	 * @returns {Promise<ViewFunctionRowResult<K,V>>}
 	 */
@@ -471,16 +690,16 @@ export class Settee {
 			signal
 		} = fromOptions(options)
 
-		const cachedResult = await Chifforobe.load(viewName,  { ...options, internal_signal: signal })
-		if(cachedResult !== undefined) {
-			const result = new Map(cachedResult)
-			const total_count = cachedResult.length
-			return formatResults(result, total_count)
-		}
+		const filterKeyList = filterKey !== undefined ? Array.isArray(filterKey) ? filterKey : [ filterKey ] : []
+
+		// const cachedResult = await Chifforobe.load(viewName,  { ...options, internal_signal: signal })
+		// if(cachedResult !== undefined) {
+		// 	const result = new Map(cachedResult)
+		// 	const total_count = cachedResult.length
+		// 	return formatResults(result, total_count, filterKeyList)
+		// }
 
 		const fn = await importView(viewName, { ...options, internal_signal: signal })
-
-		const filterKeyList = filterKey === undefined ? [] : Array.isArray(filterKey) ? filterKey : [ filterKey ]
 
 		/** @type Map<DocId, ViewFunctionResult<K, V>> */
 		const result = new Map()
@@ -497,7 +716,7 @@ export class Settee {
 			if(entry.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
 
 			const filepath = path.join(documentsRoot, entry.name)
-			await processFilePath(filepath, fn, filterKeyList, signal)
+			await processFilePath(filepath, fn, [], signal)
 				.then(results => {
 					if(results === undefined) { return }
 					if(results.length !== 2) { return }
@@ -505,15 +724,15 @@ export class Settee {
 					total_count += 1
 
 					const [ docId, value ] = results
-					result.set(docId, value)
+					result.set(docId, [ ...value ])
 				})
 				.catch(e => {
 					console.warn('process Dirent error', entry.name, e.message)
 				})
 		}
 
-		await Chifforobe.store(viewName, result, { ...options, internal_signal: signal })
+		// await Chifforobe.store(viewName, result, { ...options, internal_signal: signal })
 
-		return formatResults(result, total_count)
+		return formatResults(result, total_count, filterKeyList)
 	}
 }

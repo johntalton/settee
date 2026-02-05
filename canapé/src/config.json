@@ -1,0 +1,28 @@
+{
+	"maintenance_mode": false,
+	"dbs": [
+		{
+			"name": "color",
+			"db": "../data/color",
+			"documentsDir": "docs",
+			"timeoutMs": 120000
+		},
+		{
+			"name": "export",
+			"db": "../data/export",
+			"documentsDir": "docs",
+			"viewsDir": "view",
+			"digestAlgo": "SHA-1",
+			"timeoutMs": 1000
+		},
+		{
+			"name": "test",
+			"db": "../data/test"
+		},
+		{
+			"name": "tic",
+			"db": "../data/tic",
+			"digestAlgo": "SHA-256"
+		}
+	]
+}
