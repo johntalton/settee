@@ -1,13 +1,14 @@
-import { isMainThread, Worker, parentPort, workerData, threadName } from 'node:worker_threads'
+/** biome-ignore-all lint/style/useExportsLast: <explanation> */
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { isMainThread, parentPort, threadName, Worker, workerData } from 'node:worker_threads'
 
 import {
-	SETTEE_DEFAULT,
 	formatResults,
 	fromOptions,
 	importView,
-	processFilePath
+	processFilePath,
+	SETTEE_DEFAULT
 } from '@johntalton/settee'
 
 /** @import { SetteeOptions, ViewFunction, ViewFunctionRowResult } from '@johntalton/settee' */
@@ -48,9 +49,11 @@ export class Armoire {
 
 		const url = new URL(import.meta.url)
 
-		const workers = Array.from({ length: threadCount }, (_, index) => {
-			return new Worker(url, { name: `Armoire#${index}`, workerData: { index, viewName, options } })
-		})
+		const workers = Array.from({ length: threadCount }, (_, index) =>
+			new Worker(url, {
+				name: `Armoire#${index}`,
+				workerData: { index, viewName, options }
+			}))
 
 		const results = new Map()
 		let total_count = 0
@@ -121,12 +124,10 @@ export class Armoire {
 			})
 		}
 
-		const filterKeyList = filterKeys !== undefined ? Array.isArray(filterKeys) ? filterKeys : [ filterKeys ] : []
+		const filterKeyList = filterKeys === undefined ? [] : Array.isArray(filterKeys) ? filterKeys : [ filterKeys ]
 
 		return promise
-			.then(result => {
-				return formatResults(result, total_count, filterKeyList)
-			})
+			.then(result => formatResults(result, total_count, filterKeyList))
 			.finally(() => {
 				for(const worker of workers) {
 					worker.terminate()

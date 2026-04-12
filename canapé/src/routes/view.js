@@ -1,6 +1,6 @@
-import { Settee, Armoire } from "@johntalton/settee"
+import { Settee } from "@johntalton/settee"
 
-/** @import { RouteMatches, RouteRequest, RouteAction } from '../index.js' */
+/** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
 
 export class ViewRoute {
 	/**

@@ -20,6 +20,8 @@ export class UI {
 		if(!(toastElem instanceof HTMLDialogElement)) { throw new Error('invalid toast dialog') }
 
 		const messageElem = toastElem.querySelector('[data-message]')
+		if(messageElem === null) { throw new Error('null message element') }
+		if(!(messageElem instanceof HTMLElement)) { throw new Error('invalid message element') }
 		messageElem.innerText = message
 
 		toastElem.show()

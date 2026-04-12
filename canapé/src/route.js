@@ -1,7 +1,6 @@
-import { isValidMethod } from './index.js'
+import { isValidMethod } from '@johntalton/http-core'
 
-
-/** @import { RouteRequest, RouteFunction, RouteAction, RoutePreflight, RouteMethod } from './index.js' */
+/** @import { RouteRequest, RouteFunction, RouteAction, RoutePreflight, RouteMethod } from '@johntalton/http-core' */
 
 /**
  * @typedef {Object} RouteItem
@@ -12,11 +11,11 @@ import { isValidMethod } from './index.js'
 /** @typedef {Array<RouteItem>} Routes */
 
 /**
- * @param {RouteItem} route
+ * @param {RouteItem} routeItem
  * @return {Array<RouteMethod>}
  */
-function methodFromRoute(route) {
-	return Object.keys(route.methods)
+function methodFromRoute(routeItem) {
+	return Object.keys(routeItem.methods)
 		.map(method => isValidMethod(method) ? method : undefined)
 		.filter(method => method !== undefined)
 }
@@ -33,18 +32,19 @@ function routeOptions(routes, state) {
 		shutdownSignal
 	} = state
 
-	for(const route of routes) {
+	for(const routeItem of routes) {
 		if(shutdownSignal.aborted) { return { ...state, type: 'error', cause: `shutdown during options routing (${shutdownSignal.reason})` } }
 
-		const matches = route.pattern.exec(url)
+		const matches = routeItem.pattern.exec(url)
 		if(matches === null || matches === undefined) { continue }
 
-		const methods = methodFromRoute(route)
+		const methods = methodFromRoute(routeItem)
 
 		return {
 			...state,
 			type: 'preflight',
-			methods
+			methods,
+			supportedQueryTypes: undefined
 		}
 	}
 
@@ -73,15 +73,15 @@ export async function route(routes, state) {
 		url
 	} = state
 
-	for(const route of routes) {
+	for(const routeItem of routes) {
 		if(shutdownSignal.aborted) { return { ...state, type: 'error', cause: `shutdown during routing (${shutdownSignal.reason})` } }
 
-		const matches = route.pattern.exec(url)
+		const matches = routeItem.pattern.exec(url)
 		if(matches === null || matches === undefined) { continue }
 
-		const fn = route.methods[method]
+		const fn = routeItem.methods[method]
 		if(fn === undefined) {
-			const methods = methodFromRoute(route)
+			const methods = methodFromRoute(routeItem)
 			return { ...state, type: 'not-allowed', method, methods, url }
 		}
 

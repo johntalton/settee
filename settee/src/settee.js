@@ -1,6 +1,8 @@
+/** biome-ignore-all lint/nursery/noExcessiveLinesPerFile: legacy */
+/** biome-ignore-all lint/style/noNestedTernary: <explanation> */
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import crypto from 'node:crypto'
 
 import { Chifforobe } from './chifforobe.js'
 
@@ -64,7 +66,6 @@ import { Chifforobe } from './chifforobe.js'
  * @typedef {(doc: Document<D>) => ViewFunctionResult<K, V>|undefined} ViewFunction
  */
 
-
 export const SETTEE_ENV = {
 	DB_ROOT: 'SETTEE_DB',
 	DOCUMENTS_DIRECTORY: 'SETTEE_DOCS_DIR',
@@ -110,7 +111,7 @@ export const EMPTY_STRING = ''
 const ENV_DB_DIR = process.env[SETTEE_ENV.DB_ROOT] ?? SETTEE_DEFAULT.DB
 const ENV_DOCS_DIR = process.env[SETTEE_ENV.DOCUMENTS_DIRECTORY] ?? SETTEE_DEFAULT.DOCS
 const ENV_VIEWS_DIR = process.env[SETTEE_ENV.VIEWS_DIRECTORY] ?? SETTEE_DEFAULT.VIEWS
-const ENV_TIMEOUT_MS = parseInt(process.env[SETTEE_ENV.TIMEOUT_MS] ?? SETTEE_DEFAULT.TIMEOUT_MS, 10)
+const ENV_TIMEOUT_MS = Number.parseInt(process.env[SETTEE_ENV.TIMEOUT_MS] ?? SETTEE_DEFAULT.TIMEOUT_MS, 10)
 const ENV_DIGEST_ALGO = process.env[SETTEE_ENV.DIGEST_ALGO] ?? SETTEE_DEFAULT.DIGEST_ALGO
 const ENV_NEW_DB_DIR = process.env[SETTEE_ENV.NEW_DATABASE_ROOT]
 
@@ -222,9 +223,11 @@ export async function revisionFrom(doc, digestAlgo) {
 
 	const hash = await crypto.subtle.digest(digestAlgo, buffer)
 	const hash8 = new Uint8Array(hash)
+	const hash64 = hash8.toBase64()
 
-	/** @ts-ignore */
-	return hash8.toBase64()
+	if(!isValidRevisionId(hash64)) { throw new Error('invalid revision id') }
+
+	return hash64
 }
 
 /**
@@ -325,18 +328,18 @@ export async function processFilePath(filepath, fn, filterKeyList, signal) {
 
 /**
  * @template K, V
- * @param {Map<DocId, ViewFunctionResult<K, V>>} result
+ * @param {Map<DocId, ViewFunctionResult<K, V>>} results
  * @param {number} total_count
  * @param {Array<K>} filterKeyList
  * @returns {ViewFunctionRowResult<K, V>}
  */
-export function formatResults(result, total_count, filterKeyList) {
-	const output = result
+export function formatResults(results, total_count, filterKeyList) {
+	const output = results
 		.entries()
 		.filter(entry => entry[1] !== undefined)
 		.map(([ docId, result ]) => [ ...result ].map(item => ({ id: docId, key: item[0], value: item[1] })))
 		.reduce((accumulator, value) => {
-			const filterValue = filterKeyList.length !== 0 ? value.filter(element => filterKeyList.includes(element.key)) : value
+			const filterValue = filterKeyList.length > 0 ? value.filter(element => filterKeyList.includes(element.key)) : value
 			accumulator.push(...filterValue)
 
 			return accumulator
@@ -347,22 +350,35 @@ export function formatResults(result, total_count, filterKeyList) {
 
 export class Settee {
 	/**
+	 * @param {string|undefined} filterViewName
 	 * @param {SetteeOptions|undefined} [options]
 	 */
-	static async* changes(options) {
+	static async* changes(filterViewName, options) {
 		const {
 			documentsRoot,
 			signal
 		} = fromOptions(options)
+
+
+		const filterFn = filterViewName === undefined ? undefined : await importView(filterViewName, { ...options, internal_signal: signal })
 
 		try {
 			await using watcher = fs.watch(documentsRoot, { encoding: SETTEE_DEFAULT.FILE_ENCODING, signal })
 
 			for await (const { eventType, filename } of watcher) {
 				//
-				console.log('watch:', eventType, filename)
+				// console.log('watch:', eventType, filename)
 				if(filename === null) { continue }
+				if(filename.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
+
 				const id = path.parse(filename).name
+				if(!isValidDocId(id)) { continue }
+
+				if(filterFn !== undefined) {
+					const doc = await Settee.get(id, { ...options, internal_signal: signal })
+					const filterMatches = filterFn(doc)
+					if(filterMatches === undefined || Array.from(filterMatches).length === 0) { continue }
+				}
 
 				yield { eventType, id }
 			}
@@ -419,7 +435,7 @@ export class Settee {
 
 			if(exists) { throw new Error('database with name already exists') }
 
-			console.log('create', { dbDir, documentsRoot, viewsRoot })
+			// console.log('create', { dbDir, documentsRoot, viewsRoot })
 
 			await fs.mkdir(dbDir, { mode: fs.constants.S_IRWXU })
 			await fs.mkdir(documentsRoot, { mode: fs.constants.S_IRWXU })
@@ -523,7 +539,7 @@ export class Settee {
 			if(!view.isFile()) { continue }
 			if(view.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
 
-			const name = path.parse(view.name).name
+			const { name } = path.parse(view.name)
 
 			const cache = await Chifforobe.info(name, options)
 
@@ -690,7 +706,7 @@ export class Settee {
 			signal
 		} = fromOptions(options)
 
-		const filterKeyList = filterKey !== undefined ? Array.isArray(filterKey) ? filterKey : [ filterKey ] : []
+		const filterKeyList = filterKey === undefined ? [] : Array.isArray(filterKey) ? filterKey : [ filterKey ]
 
 		// const cachedResult = await Chifforobe.load(viewName,  { ...options, internal_signal: signal })
 		// if(cachedResult !== undefined) {
@@ -705,10 +721,7 @@ export class Settee {
 		const result = new Map()
 		let total_count = 0
 
-		const useIterator = true
-		const listing = await (useIterator ?
-			fs.opendir(documentsRoot, { bufferSize: 32, encoding: SETTEE_DEFAULT.FILE_ENCODING }) :
-			fs.readdir(documentsRoot, { withFileTypes: true, encoding: SETTEE_DEFAULT.FILE_ENCODING }))
+		const listing = await fs.opendir(documentsRoot, { bufferSize: 32, encoding: SETTEE_DEFAULT.FILE_ENCODING })
 
 		for await (const entry of listing) {
 			signal.throwIfAborted()
@@ -734,5 +747,32 @@ export class Settee {
 		// await Chifforobe.store(viewName, result, { ...options, internal_signal: signal })
 
 		return formatResults(result, total_count, filterKeyList)
+	}
+
+	/**
+	 * @param {string} filter
+	 * @param {SetteeOptions|undefined} [options]
+	 *@returns {AsyncGenerator<string, void, undefined>}
+	 */
+	static async *query(filter, options) {
+		const {
+			documentsRoot,
+			signal
+		} = fromOptions(options)
+
+		const listing = await fs.opendir(documentsRoot, { bufferSize: 32, encoding: SETTEE_DEFAULT.FILE_ENCODING })
+		for await (const entry of listing) {
+			signal.throwIfAborted()
+			if(!entry.isFile()) { continue }
+			if(entry.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
+
+			const id = path.parse(entry.name).name
+
+			if(!id.includes(filter)) { continue }
+
+			// const filepath = path.join(documentsRoot, entry.name)
+			// const info = await fs.stat(filepath)
+			yield id
+		}
 	}
 }

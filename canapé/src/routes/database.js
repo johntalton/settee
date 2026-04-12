@@ -1,7 +1,7 @@
-import { MIME_TYPE_JSON } from '@johntalton/http-util'
+import { MIME_TYPE_JSON, MIME_TYPE_URL_FORM_DATA } from '@johntalton/http-util'
 import { Settee } from '@johntalton/settee'
 
-/** @import { RouteMatches, RouteRequest, RouteAction } from '../index.js' */
+/** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
 
 export class DatabaseRoute {
 	/**
@@ -51,6 +51,41 @@ export class DatabaseRoute {
 		catch(e) {
 			if(!Error.isError(e)) { throw e }
 			return { ...state, type: 'error', cause: e.message, error: e }
+		}
+	}
+
+	/**
+	 * @param {RouteMatches} matches
+	 * @param {RouteRequest} state
+	 * @returns {Promise<RouteAction>}
+	 */
+	static async query(matches, state) {
+		const { config } = state
+		const { db } = matches
+
+		if(db === undefined) { return { ...state, type: '404', message: 'database undefined' } }
+		const foundDB = config.dbs.find(value => value.name === db)
+		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' }}
+
+		if(state.body.contentType?.mimetype !== MIME_TYPE_URL_FORM_DATA) {
+			return { ...state, type: 'unsupported-media', acceptableMediaTypes: [ MIME_TYPE_URL_FORM_DATA ], supportedQueryTypes: [ MIME_TYPE_URL_FORM_DATA ] }
+		}
+
+		const query = state.url.searchParams.get('q')
+		if(query === null) {
+			return { ...state, type: 'error', cause: 'missing query parameter' }
+		}
+
+		if(query === '') {
+			return { ...state, type: 'error', cause: 'empty query parameter' }
+		}
+
+		const results = await Array.fromAsync(Settee.query(query, foundDB))
+
+		return {
+			...state,
+			type: 'json',
+			obj: { results }
 		}
 	}
 }

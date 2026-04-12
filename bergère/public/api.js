@@ -83,11 +83,13 @@ export class API {
 	 *
 	 */
 	static async listDBs() {
+		const bearerToken = 'FAKE'
+
 		const response = await fetch(CANAPE_URL, {
 			method: 'GET',
 			mode: 'cors',
 			headers: {
-				'Authorization': `Bearer FAKE`,
+				'Authorization': `Bearer ${bearerToken}`,
 				'accept': 'application/json'
 			},
 			signal: AbortSignal.timeout(API_OPTIONS.defaultTimeout)

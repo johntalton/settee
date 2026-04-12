@@ -1,8 +1,8 @@
-import { Conditional, ETag } from '@johntalton/http-util'
-import { SETTEE_INTERNAL_PROPERTIES, Settee, isValidDocId } from '@johntalton/settee'
+import { Conditional, ETag, MIME_TYPE_JSON } from '@johntalton/http-util'
+import { isValidDocId, SETTEE_INTERNAL_PROPERTIES, Settee } from '@johntalton/settee'
 
 /** @import { DocId, Document, SetteeOptions } from '@johntalton/settee' */
-/** @import { RouteMatches, RouteRequest, RouteAction } from '../index.js' */
+/** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
 
 export class DocumentRoute {
 	/**
@@ -34,10 +34,12 @@ export class DocumentRoute {
 			const obj = await Settee.get(id, foundDB)
 
 			const etag = obj[SETTEE_INTERNAL_PROPERTIES.REVISION]
+			if(etag === undefined) {
+				throw new Error('document missing revision tag')
+			}
 
-
-			const testMatch = state.conditions.match.length !== 0
-			const testNonMatch = state.conditions.noneMatch.length !== 0
+			const testMatch = state.conditions.match.length > 0
+			const testNonMatch = state.conditions.noneMatch.length > 0
 
 			if(testMatch && Conditional.hasAny(state.conditions.match)) {
 				// match any
@@ -75,8 +77,7 @@ export class DocumentRoute {
 		}
 		catch(error) {
 			if(!Error.isError(error)) { throw error }
-			console.log('document get error', error.message, state.url)
-			if(!Error.isError(error)) { throw error }
+			console.log('document get error', error.message, state.url.href)
 			if(error.code === 'ENOENT') { return { ...state, type: '404', message: 'document does not exist' }}
 			throw error
 		}
@@ -95,12 +96,14 @@ export class DocumentRoute {
 
 		try {
 			const obj = await Settee.set(id, doc, options)
+			const etag = obj[SETTEE_INTERNAL_PROPERTIES.REVISION]
+			if(etag === undefined) { throw new Error('document missing revision tag') }
 
 			// TODO 201 Created
 			return {
 				...state,
 				type: 'json',
-				etag: ETag.strong(obj[SETTEE_INTERNAL_PROPERTIES.REVISION]),
+				etag: ETag.strong(etag),
 				obj
 			}
 		}
@@ -127,11 +130,13 @@ export class DocumentRoute {
 		}
 
 		const obj = await Settee.update(doc, options)
+		const etag = obj[SETTEE_INTERNAL_PROPERTIES.REVISION]
+		if(etag === undefined) { throw new Error('document missing revision tag') }
 
 		return {
 			...state,
 			type: 'json',
-			etag: ETag.strong(obj[SETTEE_INTERNAL_PROPERTIES.REVISION]),
+			etag: ETag.strong(etag),
 			obj
 		}
 	}
@@ -150,6 +155,10 @@ export class DocumentRoute {
 		const foundDB = config.dbs.find(value => value.name === db)
 		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' } }
 
+		if(state.body.contentType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'unsupported-media', acceptableMediaTypes: [ MIME_TYPE_JSON ] }
+		}
+
 		/** @type {Record<string, string>|Document<any>} */
 		const doc = await state.body.json()
 		const revision = doc[SETTEE_INTERNAL_PROPERTIES.REVISION]
@@ -160,12 +169,11 @@ export class DocumentRoute {
 			}
 			return DocumentRoute.#create(state, id, doc, foundDB)
 		}
-		else {
-			if(id !== doc[SETTEE_INTERNAL_PROPERTIES.ID]) {
-				throw new Error('update id does not match doc id')
-			}
 
-			return DocumentRoute.#update(state, id, doc, foundDB)
+		if(id !== doc[SETTEE_INTERNAL_PROPERTIES.ID]) {
+			throw new Error('update id does not match doc id')
 		}
+
+		return DocumentRoute.#update(state, id, doc, foundDB)
 	}
 }

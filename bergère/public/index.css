@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/nursery/noExcessiveLinesPerFile: <explanation> */
 @layer Base, Form, App;
 
 @font-face {
@@ -231,8 +232,8 @@
 		overflow:hidden;
 		align-items: center;
 
-		background-color: var(--color-bg1);
-		color: var(--color-fg1);
+		/* background-color: var(--color-bg1);
+		color: var(--color-fg1); */
 
 		background-image: linear-gradient(to right, var(--color-bg2), transparent);
 		color: var(--color-fg2);
@@ -622,6 +623,7 @@
 				top: -27%;
 				/* filter: opacity(0.15); */
 				opacity: 0.5;
+				/* biome-ignore lint/correctness/noUnknownProperty: <explanation> */
 				interactivity: inert;
 			}
 
@@ -684,6 +686,7 @@
 				display: grid;
 				grid-template-columns: subgrid;
 				gap: 1em;
+				align-items: center;
 
 				text-decoration: none;
 

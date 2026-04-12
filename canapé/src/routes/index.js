@@ -1,10 +1,12 @@
 import http2 from 'node:http2'
 
-import { DocumentRoute } from './document.js'
-import { ViewRoute } from './view.js'
-import { SSERoute } from './sse.js'
-import { InfoRoute } from './info.js'
+import { HTTP_METHOD_QUERY }  from '@johntalton/http-util/response'
+
 import { DatabaseRoute } from './database.js'
+import { DocumentRoute } from './document.js'
+import { InfoRoute } from './info.js'
+import { SSERoute } from './sse.js'
+import { ViewRoute } from './view.js'
 
 const {
 	HTTP2_METHOD_GET,
@@ -17,6 +19,7 @@ const {
 
 const INFO_PATH = new URLPattern({ pathname: '/' })
 const DB_PATH = new URLPattern({ pathname: '/:db' })
+// biome-ignore lint/security/noSecrets: Regex is complex sometimes
 const DOCUMENT_PATH = new URLPattern({ pathname: '/:db/:id([_\\-:!a-zA-Z\\d]+(?<!sse|view))' })
 const VIEW_INFO = new URLPattern({ pathname: '/:db/view' })
 const VIEW_PATH = new URLPattern({ pathname: '/:db/view/:view' })
@@ -48,7 +51,8 @@ export const ROUTES = [
 		pattern: DB_PATH,
 		methods: {
 			[HTTP2_METHOD_POST]: DatabaseRoute.create,
-			[HTTP2_METHOD_GET]: InfoRoute.getDB
+			[HTTP2_METHOD_GET]: InfoRoute.getDB,
+			[HTTP_METHOD_QUERY]: DatabaseRoute.query
 		}
 	},
 	{

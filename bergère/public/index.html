@@ -94,14 +94,14 @@
 			<h1>Bergère</h1>
 		</header>
 		<dialog id="Toast" class="Warn">
-			<img src="./icons/warning.svg" atl="Warning" class="Warn" />
-			<img src="./icons/error.svg" atl="Error" class="Error" />
+			<img src="./icons/warning.svg" alt="Warning" class="Warn" />
+			<img src="./icons/error.svg" alt="Error" class="Error" />
 			<p id="ToastMessage" data-message>
 				 <!-- Lorem ipsum dolor sit amet consectetur adipisicing elit. Iure quisquam reiciendis autem quam? Voluptate tempora sapiente veniam? Suscipit nihil perspiciatis delectus hic, sit numquam, cupiditate ducimus vero, totam ratione dicta. -->
 				this is a test
 			</p>
-			<button commandFor="Toast" command="close">
-				<img src="./icons/close-small.svg" atl="close" />
+			<button type="button" commandFor="Toast" command="close">
+				<img src="./icons/close-small.svg" alt="close" />
 			</button>
 		</dialog>
 		<aside>
@@ -175,7 +175,7 @@
 							<form id="DocumentsListSearch" method="dialog">
 								<label>
 									<span>Search</span>
-									<input type="search" placeholder="search" />
+									<input id="DocumentsListingSearchInput" type="search" placeholder="search" />
 								</label>
 							</form>
 						</search>

@@ -1,7 +1,8 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { fromOptions, FILE_MODE } from './settee.js'
+//
+import { FILE_MODE, fromOptions  } from './settee.js'
 
 /** @import { SetteeOptions, DocId, ViewFunctionResult } from './settee.js' */
 
@@ -48,7 +49,7 @@ export const ENV_VIEWS_CACHE_DIR = process.env[CHIFFOROBE_ENV.CACHE_DIR] ?? CHIF
 export function cacheFileForView(cacheRoot, viewName) {
 	return path.format({
 			dir: cacheRoot,
-			name: '.' + viewName,
+			name: `.${viewName}`,
 			ext: CHIFFOROBE_DEFAULT.FILE_EXTENSION
 		})
 }
@@ -126,7 +127,7 @@ export class Chifforobe {
 
 		const viewCacheFile = path.format({
 			dir: cacheRoot,
-			name: '.' + viewName,
+			name: `.${viewName}`,
 			ext: CHIFFOROBE_DEFAULT.FILE_EXTENSION
 		})
 

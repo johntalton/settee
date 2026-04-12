@@ -8,7 +8,6 @@
     "import": "mkdir -p ./public/shared/@johntalton & cp -p -R  ../node_modules/@johntalton/json-tokenizer/ ./public/shared/@johntalton/json-tokenizer/"
   },
   "devDependencies": {
-    "http-server": "^14.1.1",
-    "@johntalton/json-tokenizer": "^1.1.1"
+    "@johntalton/json-tokenizer": "^1.1.2"
   }
 }

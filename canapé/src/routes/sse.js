@@ -1,9 +1,8 @@
+import { MIME_TYPE_EVENT_STREAM } from '@johntalton/http-util'
+import { Settee } from '@johntalton/settee'
 import { SSE_LAST_EVENT_ID } from '@johntalton/sse-util'
 
-import { Settee } from '@johntalton/settee'
-import { MIME_TYPE_EVENT_STREAM } from '@johntalton/http-util'
-
-/** @import { RouteMatches, RouteRequest, RouteAction } from '../index.js' */
+/** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
 
 export class SSERoute {
   /**
@@ -23,6 +22,8 @@ export class SSERoute {
 			return { ...state, type: 'not-acceptable', acceptableMediaTypes: [ MIME_TYPE_EVENT_STREAM ] }
 		}
 
+		const filterViewName = state.url.searchParams.get('view') ?? undefined
+
 		const { port1, port2 } = new MessageChannel()
 
 		const controller = new AbortController()
@@ -35,8 +36,8 @@ export class SSERoute {
 				const sseEndSignal = controller.signal
 				const signal = AbortSignal.any([ shutdownSignal, sseEndSignal ])
 
-				for await (const change of Settee.changes({ ...foundDB, internal_signal: signal  })) {
-					console.log('Settee Change', change)
+				for await (const change of Settee.changes(filterViewName, { ...foundDB, internal_signal: signal  })) {
+					console.log('Settee Change', state.streamId, change)
 					const { id } = change
 
 					port1.postMessage({
@@ -47,14 +48,14 @@ export class SSERoute {
 			})
 			.catch(e => {
 				if(e.name === 'AbortError') {
-					console.log('sse source aborted', e.cause)
+					console.log('sse source aborted', state.streamId, e.cause)
 				}
 				else {
 					console.warn('error in sse source', e)
 				}
 			})
 			.finally(() => {
-				console.log('sse source generator existed')
+				console.log('sse source generator existed', state.streamId)
 			})
 
 		// Send welcome message with preferred timeout
@@ -64,7 +65,7 @@ export class SSERoute {
 		})
 
 		state.stream.once('close', () => {
-			console.log('stream close in SSE source')
+			console.log('stream close in SSE source', state.streamId)
 			// clearInterval(interval)
 			// clearImmediate(immediate)
 			port1.close()

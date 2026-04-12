@@ -1,8 +1,9 @@
-import { Settee } from '@johntalton/settee'
-import * as v8 from 'node:v8'
 import { performance } from 'node:perf_hooks'
+import { getHeapStatistics } from 'node:v8'
 
-/** @import { RouteMatches, RouteRequest, RouteAction } from '../index.js' */
+import { Settee } from '@johntalton/settee'
+
+/** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
 
 export class InfoRoute {
 	/**
@@ -14,7 +15,7 @@ export class InfoRoute {
 		const { config } = state
 
 		const memUsage = process.memoryUsage()
-		const heapStats = v8.getHeapStatistics()
+		const heapStats = getHeapStatistics()
 
 		return {
 			...state,

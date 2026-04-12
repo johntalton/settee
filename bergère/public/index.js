@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/nursery/noExcessiveLinesPerFile: <explanation> */
 import {
 	API,
 	CANAPE_URL,
@@ -237,7 +238,7 @@ async function onContentLoadedAsync() {
 		}
 	})
 
-
+	//
 	const listingOptionsForm = document.getElementById('DocumentsListOptions')
 	listingOptionsForm?.addEventListener('change', event => {
 		console.log('form change', event)
@@ -246,6 +247,16 @@ async function onContentLoadedAsync() {
 		if(viewSelect === null || !(viewSelect instanceof HTMLSelectElement)) { throw new Error('invalid view selector') }
 		const viewName = viewSelect.selectedOptions.item(0)?.value
 		navigation.navigate(`#database/${databaseName}:${viewName}`)
+	})
+
+	//
+	const documentSearchForm = document.getElementById('DocumentsListingSearchInput')
+	if(documentSearchForm === null || !(documentSearchForm instanceof HTMLInputElement)) { throw new Error('invalid search input') }
+	documentSearchForm.addEventListener('change', event => {
+		console.log('change', event.target)
+	})
+	documentSearchForm.addEventListener('input', event => {
+		console.log('input', event.target)
 	})
 
 
