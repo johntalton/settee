@@ -60,12 +60,12 @@ export class Chifforobe {
 	 * @param {(SetteeOptions & ChifforobeOptions)|undefined} [options]
 	 */
 	static async info(viewName, options) {
-		const { viewsRoot } = fromOptions(options)
+		const { viewsRoot, signal } = fromOptions(options)
 		const { cacheRoot } = fromChifforobeOptions(viewsRoot, options)
 		const viewCacheFile = cacheFileForView(cacheRoot, viewName)
 
 		const name = path.relative(viewsRoot, viewCacheFile)
-		const stat = await fs.stat(viewCacheFile)
+		const stat = await fs.stat(viewCacheFile, { signal })
 			.catch(e => ({ code: e.code }))
 
 		const { code, size, mtime, mtimeMs } = stat

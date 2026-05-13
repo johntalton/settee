@@ -458,7 +458,8 @@ export class Settee {
 	 */
 	static async _info(options) {
 		const {
-			documentsRoot
+			documentsRoot,
+			signal
 		} = fromOptions(options)
 
 		let total_count = 0
@@ -469,7 +470,7 @@ export class Settee {
 			if(!entry.isFile()) { continue }
 			if(entry.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
 
-			const stat = await fs.stat(path.join(documentsRoot, entry.name), { bigint: false })
+			const stat = await fs.stat(path.join(documentsRoot, entry.name), { bigint: false, signal })
 			size += stat.size
 			total_count += 1
 		}
@@ -502,7 +503,7 @@ export class Settee {
 			if(!value.isFile()) { return }
 			if(value.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { return }
 
-			return fs.stat(path.join(documentsRoot, value.name), { bigint: false })
+			return fs.stat(path.join(documentsRoot, value.name), { bigint: false, signal })
 				.then(stat => {
 					total_count += 1
 					size += stat.size
@@ -604,7 +605,7 @@ export class Settee {
 
 		const filepath = pathFromId(documentsRoot, id)
 
-		// const futureStats = fs.stat(filepath)
+		// const futureStats = fs.stat(filepath, {})
 
 		const json = await fs.readFile(filepath, { encoding: SETTEE_DEFAULT.FILE_ENCODING, flag: FILE_FLAGS.DOC_GET, signal })
 		const internalDoc = JSON.parse(json)
