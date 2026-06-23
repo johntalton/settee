@@ -11,15 +11,16 @@ export class SSERoute {
 	 * @returns {Promise<RouteAction>}
 	 */
   static async get(matches, state) {
-		const { config, accept, shutdownSignal } = state
+		const { config, shutdownSignal } = state
 		const { db } = matches
 
 		if(db === undefined) { return { ...state, type: '404', message: 'database undefined' }}
 		const foundDB = config.dbs.find(value => value.name === db)
 		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' } }
 
-		if(accept.type !== MIME_TYPE_EVENT_STREAM) {
-			return { ...state, type: 'not-acceptable', acceptableMediaTypes: [ MIME_TYPE_EVENT_STREAM ] }
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_EVENT_STREAM ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_EVENT_STREAM) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_EVENT_STREAM ] }
 		}
 
 		const filterViewName = state.url.searchParams.get('view') ?? undefined

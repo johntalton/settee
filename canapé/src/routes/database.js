@@ -24,7 +24,7 @@ export class DatabaseRoute {
 		if(foundDB !== undefined) { return { ...state, type: 'conflict', message: 'existing db found' }}
 
 		if(state.body.contentType?.mimetype !== MIME_TYPE_JSON) {
-			return { ...state, type: 'unsupported-media', acceptableMediaTypes: [ MIME_TYPE_JSON ] }
+			return { ...state, type: 'unsupported-media', supportedTypes: [ MIME_TYPE_JSON ] }
 		}
 
 		const body = await state.body.json()
@@ -67,8 +67,18 @@ export class DatabaseRoute {
 		const foundDB = config.dbs.find(value => value.name === db)
 		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' }}
 
+		//
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+		}
+
+		//
+		const negotiatedEncoding = state.accept.select.encoding()
+
+		//
 		if(state.body.contentType?.mimetype !== MIME_TYPE_URL_FORM_DATA) {
-			return { ...state, type: 'unsupported-media', acceptableMediaTypes: [ MIME_TYPE_URL_FORM_DATA ], supportedQueryTypes: [ MIME_TYPE_URL_FORM_DATA ] }
+			return { ...state, type: 'unsupported-media', supportedTypes: [ MIME_TYPE_URL_FORM_DATA ], supportedQueryTypes: [ MIME_TYPE_URL_FORM_DATA ] }
 		}
 
 		const query = state.url.searchParams.get('q')
@@ -76,16 +86,19 @@ export class DatabaseRoute {
 			return { ...state, type: 'error', cause: 'missing query parameter' }
 		}
 
+		//
 		if(query === '') {
 			return { ...state, type: 'error', cause: 'empty query parameter' }
 		}
 
+		//
 		const results = await Array.fromAsync(Settee.query(query, foundDB))
 
 		return {
 			...state,
 			type: 'json',
-			obj: { results }
+			obj: { results },
+			encoding: negotiatedEncoding?.name
 		}
 	}
 }

@@ -1,7 +1,8 @@
-export const CANAPE_URL = 'https://canape.next.local:6095/'
+export const CANAPE_URL = 'https://canape.next.internal:6095/'
 export const API_OPTIONS = {
 	defaultTimeout: 1000
 }
+
 export class API {
 	/**
 	 * @param {string} databaseName
@@ -13,7 +14,7 @@ export class API {
 			mode: 'cors',
 			headers: {
 				'content-type': 'application/json',
-				'accept': 'application/json',
+				'accept': 'application/json'
 			},
 			body: JSON.stringify(options),
 			signal: AbortSignal.timeout(API_OPTIONS.defaultTimeout)
@@ -40,7 +41,7 @@ export class API {
 			mode: 'cors',
 			headers: {
 				'content-type': 'application/json',
-				'accept': 'application/json',
+				'accept': 'application/json'
 			},
 			body: JSON.stringify(doc),
 			signal: AbortSignal.timeout(API_OPTIONS.defaultTimeout)
@@ -65,7 +66,7 @@ export class API {
 			mode: 'cors',
 			headers: {
 				'content-type': 'application/json',
-				'accept': 'application/json',
+				'accept': 'application/json'
 			},
 			body: JSON.stringify(doc),
 			signal: AbortSignal.timeout(API_OPTIONS.defaultTimeout)
@@ -107,7 +108,9 @@ export class API {
 		const itemResponse = await fetch(new URL(databaseName, CANAPE_URL), {
 			method: 'GET',
 			mode: 'cors',
-			headers: {},
+			headers: {
+				'accept': 'application/json'
+			},
 			signal: AbortSignal.timeout(API_OPTIONS.defaultTimeout)
 		})
 		if(!itemResponse.ok) { throw new Error('response not ok') }
@@ -122,7 +125,9 @@ export class API {
 		const response = await fetch(new URL(`${databaseName}/view`, CANAPE_URL), {
 			method: 'GET',
 			mode: 'cors',
-			headers: {},
+			headers: {
+				// 'accept': 'application/json'
+			},
 			signal: AbortSignal.timeout(API_OPTIONS.defaultTimeout)
 		})
 
@@ -157,8 +162,8 @@ export class API {
 		console.log('load document', databaseName, id)
 		const response = await fetch(new URL(`/${databaseName}/${id}`, CANAPE_URL), {
 			method: 'GET',
-			cache: 'force-cache',
-			mode: 'cors',
+			// cache: 'no-cache', //'force-cache',
+			// mode: 'cors',
 			headers: {
 				'Authorization': `Bearer ${'some_token'}`,
 				// 'accept': 'application/json'
@@ -172,7 +177,8 @@ export class API {
 			throw new Error('document response not ok')
 		}
 
-		console.log('response', [...response.headers.entries()], response.redirected)
+		// console.log('response', [...response.headers.entries()], response.redirected)
+		// console.log('etag', response.headers.get('etag'))
 
 		return response.json()
 	}

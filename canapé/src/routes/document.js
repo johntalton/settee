@@ -29,6 +29,14 @@ export class DocumentRoute {
 
 		if (!isValidDocId(id)) { return { ...state, type: '404', message: 'invalid document id' } }
 
+		//
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+		}
+
+		const negotiatedEncoding = state.accept.select.encoding()
+
 		try {
 			/** @type {Document<Object>} */
 			const obj = await Settee.get(id, foundDB)
@@ -71,7 +79,8 @@ export class DocumentRoute {
 				...state,
 				type: 'json',
 				obj,
-				lastModified: undefined,
+				encoding: negotiatedEncoding?.name,
+				// lastModified: undefined,
 				etag: ETag.strong(etag),
 			}
 		}
@@ -94,6 +103,10 @@ export class DocumentRoute {
 	static async #create(state, id, doc, options) {
 		console.log('no revision, this is a create')
 
+		//
+		const negotiatedEncoding = state.accept.select.encoding()
+
+		//
 		try {
 			const obj = await Settee.set(id, doc, options)
 			const etag = obj[SETTEE_INTERNAL_PROPERTIES.REVISION]
@@ -104,7 +117,8 @@ export class DocumentRoute {
 				...state,
 				type: 'json',
 				etag: ETag.strong(etag),
-				obj
+				obj,
+				encoding: negotiatedEncoding?.name
 			}
 		}
 		catch(e) {
@@ -124,6 +138,10 @@ export class DocumentRoute {
 	static async #update(state, id, doc, options) {
 		console.log('revision, try update')
 
+		//
+		const negotiatedEncoding = state.accept.select.encoding()
+
+		//
 		const has = await Settee.has(id, options)
 		if(!has) {
 			return { ...state, type: '404', message: 'document not found' }
@@ -137,7 +155,8 @@ export class DocumentRoute {
 			...state,
 			type: 'json',
 			etag: ETag.strong(etag),
-			obj
+			obj,
+			encoding: negotiatedEncoding?.name
 		}
 	}
 
@@ -156,13 +175,20 @@ export class DocumentRoute {
 		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' } }
 
 		if(state.body.contentType?.mimetype !== MIME_TYPE_JSON) {
-			return { ...state, type: 'unsupported-media', acceptableMediaTypes: [ MIME_TYPE_JSON ] }
+			return { ...state, type: 'unsupported-media', supportedTypes: [ MIME_TYPE_JSON ] }
 		}
 
 		/** @type {Record<string, string>|Document<any>} */
 		const doc = await state.body.json()
 		const revision = doc[SETTEE_INTERNAL_PROPERTIES.REVISION]
 
+		//
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+		}
+
+		//
 		if(revision === undefined) {
 			if(doc[SETTEE_INTERNAL_PROPERTIES.ID] !== undefined) {
 				return { ...state, type: 'unprocessable', message: 'create with unspecified id' }
@@ -170,6 +196,7 @@ export class DocumentRoute {
 			return DocumentRoute.#create(state, id, doc, foundDB)
 		}
 
+		//
 		if(id !== doc[SETTEE_INTERNAL_PROPERTIES.ID]) {
 			throw new Error('update id does not match doc id')
 		}

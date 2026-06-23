@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/performance/noAwaitInLoops: <explanation> */
 import { isValidMethod } from '@johntalton/http-core'
 
 /** @import { RouteRequest, RouteFunction, RouteAction, RoutePreflight, RouteMethod } from '@johntalton/http-core' */
@@ -44,11 +45,12 @@ function routeOptions(routes, state) {
 			...state,
 			type: 'preflight',
 			methods,
-			supportedQueryTypes: undefined
+			supportedQueryTypes: undefined,
+			// supportedTypes: {}
 		}
 	}
 
-	return { ...state, type: '404', method, url, message: 'options route not found' }
+	return { ...state, type: '404', method, message: 'options route not found' }
 }
 
 
@@ -82,7 +84,7 @@ export async function route(routes, state) {
 		const fn = routeItem.methods[method]
 		if(fn === undefined) {
 			const methods = methodFromRoute(routeItem)
-			return { ...state, type: 'not-allowed', method, methods, url }
+			return { ...state, type: 'not-allowed', method, methods }
 		}
 
 		state.meta.performance.push({
@@ -103,5 +105,5 @@ export async function route(routes, state) {
 		return result
 	}
 
-	return { ...state, type: '404', method, url, message: 'route not found' }
+	return { ...state, type: '404', method, message: 'route not found' }
 }

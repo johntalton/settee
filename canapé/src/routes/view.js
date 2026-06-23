@@ -1,3 +1,4 @@
+import { MIME_TYPE_JSON } from "@johntalton/http-util"
 import { Settee } from "@johntalton/settee"
 
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
@@ -18,7 +19,15 @@ export class ViewRoute {
 
 		if (view === undefined) { return { ...state, type: '404', message: 'view undefined' } }
 
+		//
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+		}
 
+		const negotiatedEncoding = state.accept.select.encoding()
+
+		//
 		const filterKeys = state.url.searchParams.getAll('key')
 		// console.log('view', view, filterKeys)
 
@@ -32,7 +41,8 @@ export class ViewRoute {
 		return {
 			...state,
 			type: 'json',
-			obj
+			obj,
+			encoding: negotiatedEncoding?.name
 		}
 	}
 }

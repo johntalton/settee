@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks'
 import { getHeapStatistics } from 'node:v8'
 
+import { MIME_TYPE_JSON } from '@johntalton/http-util'
 import { Settee } from '@johntalton/settee'
 
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
@@ -14,12 +15,22 @@ export class InfoRoute {
 	static async getRoot(_matches, state) {
 		const { config } = state
 
+		//
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+		}
+
+		const negotiatedEncoding = state.accept.select.encoding()
+
+		//
 		const memUsage = process.memoryUsage()
 		const heapStats = getHeapStatistics()
 
 		return {
 			...state,
 			type: 'json',
+			encoding: negotiatedEncoding?.name,
 			obj: {
 				dbs: config.dbs.map(db => db.name),
 				now: Math.trunc(performance.now() / 1000),
@@ -52,12 +63,21 @@ export class InfoRoute {
 		const foundDB = config.dbs.find(value => value.name === db)
 		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' } }
 
+		//
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+		}
+
+		const negotiatedEncoding = state.accept.select.encoding()
+
 		const info = await Settee.info(foundDB)
 			.catch(e => { throw new Error('Error fetching DB info', { cause: e }) })
 
 		return {
 			...state,
 			type: 'json',
+			encoding: negotiatedEncoding?.name,
 			obj: {
 				...info,
 				digestAlgo: foundDB.digestAlgo
@@ -78,12 +98,22 @@ export class InfoRoute {
 		const foundDB = config.dbs.find(value => value.name === db)
 		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' } }
 
+		//
+		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
+		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
+			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+		}
+
+		const negotiatedEncoding = state.accept.select.encoding()
+
+		//
 		const info = await Settee.viewInfo(foundDB)
 
 		return {
 			...state,
 			type: 'json',
-			obj: info
+			obj: info,
+			encoding: negotiatedEncoding?.name
 		}
 	}
 }
