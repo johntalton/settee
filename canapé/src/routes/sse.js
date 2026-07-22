@@ -3,12 +3,13 @@ import { Settee } from '@johntalton/settee'
 import { SSE_LAST_EVENT_ID } from '@johntalton/sse-util'
 
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
+/** @import { CanapeConfig } from '../index.js' */
 
 export class SSERoute {
   /**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
   static async get(matches, state) {
 		const { config, shutdownSignal } = state

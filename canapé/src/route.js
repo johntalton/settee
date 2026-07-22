@@ -1,18 +1,23 @@
-/** biome-ignore-all lint/performance/noAwaitInLoops: <explanation> */
+/** biome-ignore-all lint/performance/noAwaitInLoops: because we do */
 import { isValidMethod } from '@johntalton/http-core'
 
-/** @import { RouteRequest, RouteFunction, RouteAction, RoutePreflight, RouteMethod } from '@johntalton/http-core' */
+/** @import { Config, PreambleRouteResult, RouteFunction, RouteError, RoutePreflight, Route404, RouteRequest, RouteAction, RouteMethod } from '@johntalton/http-core' */
 
 /**
+ * @template {Config} C
  * @typedef {Object} RouteItem
  * @property {URLPattern} pattern
- * @property {Record<string|RouteMethod, RouteFunction>} methods
+ * @property {Record<string|RouteMethod, RouteFunction<C>>} methods
  */
 
-/** @typedef {Array<RouteItem>} Routes */
+/**
+ * @template {Config} C
+ * @typedef {Array<RouteItem<C>>} Routes
+ */
 
 /**
- * @param {RouteItem} routeItem
+ * @template {Config} C
+ * @param {RouteItem<C>} routeItem
  * @return {Array<RouteMethod>}
  */
 function methodFromRoute(routeItem) {
@@ -22,13 +27,13 @@ function methodFromRoute(routeItem) {
 }
 
 /**
- * @param {Routes} routes
- * @param {RoutePreflight} state
- * @returns {RouteAction}
+ * @template {Config} C
+ * @param {Routes<C>} routes
+ * @param {RouteRequest<C>} state
+ * @returns {RoutePreflight<C>|Route404<C>|RouteError<C>}
  */
 function routeOptions(routes, state) {
 	const {
-		method,
 		url,
 		shutdownSignal
 	} = state
@@ -45,19 +50,21 @@ function routeOptions(routes, state) {
 			...state,
 			type: 'preflight',
 			methods,
-			supportedQueryTypes: undefined,
-			// supportedTypes: {}
+			supportedQueryTypes: [],
+			supportedTypes: [],
+			supportedHeaders: []
 		}
 	}
 
-	return { ...state, type: '404', method, message: 'options route not found' }
+	return { ...state, type: '404', message: 'options route not found' }
 }
 
 
 /**
- * @param {Routes} routes
- * @param {RouteRequest|RouteAction} state
- * @returns {Promise<RouteAction>}
+ * @template {Config} C
+ * @param {Routes<C>} routes
+ * @param {PreambleRouteResult<C>} state
+ * @returns {Promise<RouteAction<C>>}
  */
 export async function route(routes, state) {
 	const routeStart = performance.now()
@@ -67,8 +74,8 @@ export async function route(routes, state) {
 		shutdownSignal,
 	} = state
 
-	if(type === 'preflight') { return routeOptions(routes, state) }
 	if(type !== 'request') { return state }
+	if(state.method === 'OPTIONS') { return routeOptions(routes, state) }
 
 	const {
 		method,

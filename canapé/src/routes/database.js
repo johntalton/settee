@@ -2,12 +2,13 @@ import { MIME_TYPE_JSON, MIME_TYPE_URL_FORM_DATA } from '@johntalton/http-util'
 import { Settee } from '@johntalton/settee'
 
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
+/** @import { CanapeConfig } from '../index.js' */
 
 export class DatabaseRoute {
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async create(matches, state) {
 		const { config } = state
@@ -56,8 +57,8 @@ export class DatabaseRoute {
 
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async query(matches, state) {
 		const { config } = state

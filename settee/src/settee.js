@@ -1,4 +1,4 @@
-/** biome-ignore-all lint/nursery/noExcessiveLinesPerFile: legacy */
+/** biome-ignore-all lint/style/noExcessiveLinesPerFile: legacy */
 /** biome-ignore-all lint/style/noNestedTernary: <explanation> */
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
@@ -366,6 +366,8 @@ export class Settee {
 			await using watcher = fs.watch(documentsRoot, { encoding: SETTEE_DEFAULT.FILE_ENCODING, signal })
 
 			for await (const { eventType, filename } of watcher) {
+				signal.throwIfAborted()
+
 				//
 				// console.log('watch:', eventType, filename)
 				if(filename === null) { continue }

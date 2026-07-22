@@ -3,12 +3,13 @@ import { isValidDocId, SETTEE_INTERNAL_PROPERTIES, Settee } from '@johntalton/se
 
 /** @import { DocId, Document, SetteeOptions } from '@johntalton/settee' */
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
+/** @import { CanapeConfig } from '../index.js' */
 
 export class DocumentRoute {
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async head(matches, state) {
 		return DocumentRoute.get(matches, state)
@@ -16,8 +17,8 @@ export class DocumentRoute {
 
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async get(matches, state) {
 		const { config } = state
@@ -94,11 +95,11 @@ export class DocumentRoute {
 
 	/**
 	 * @template T
-	 * @param {RouteRequest} state
+	 * @param {RouteRequest<CanapeConfig>} state
 	 * @param {DocId} id
 	 * @param {T} doc
 	 * @param {SetteeOptions} options
-	 * @returns {Promise<RouteAction>}
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async #create(state, id, doc, options) {
 		console.log('no revision, this is a create')
@@ -129,11 +130,11 @@ export class DocumentRoute {
 
 	/**
 	 * @template T
-	 * @param {RouteRequest} state
+	 * @param {RouteRequest<CanapeConfig>} state
 	 * @param {DocId} id
 	 * @param {Document<T>} doc
 	 * @param {SetteeOptions} options
-	 * @returns {Promise<RouteAction>}
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async #update(state, id, doc, options) {
 		console.log('revision, try update')
@@ -162,14 +163,14 @@ export class DocumentRoute {
 
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async post(matches, state) {
 		const { config } = state
 		const { db, id } = matches
 
-		if (!isValidDocId(id)) { return { ...state, type: 'unprocessable', message: 'invalid document id' } }
+		if (!isValidDocId(id)) { return { ...state, type: 'unprocessable' } }
 		if(db === undefined) { return { ...state, type: '404', message: 'database undefined' }}
 		const foundDB = config.dbs.find(value => value.name === db)
 		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' } }
@@ -191,7 +192,7 @@ export class DocumentRoute {
 		//
 		if(revision === undefined) {
 			if(doc[SETTEE_INTERNAL_PROPERTIES.ID] !== undefined) {
-				return { ...state, type: 'unprocessable', message: 'create with unspecified id' }
+				return { ...state, type: 'unprocessable' }
 			}
 			return DocumentRoute.#create(state, id, doc, foundDB)
 		}

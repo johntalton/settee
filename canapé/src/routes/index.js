@@ -16,6 +16,7 @@ const {
 } = http2.constants
 
 /** @import { Routes } from '../route.js' */
+/** @import { CanapeConfig } from '../index.js' */
 
 const INFO_PATH = new URLPattern({ pathname: '/' })
 const DB_PATH = new URLPattern({ pathname: '/:db' })
@@ -25,7 +26,7 @@ const VIEW_INFO = new URLPattern({ pathname: '/:db/view' })
 const VIEW_PATH = new URLPattern({ pathname: '/:db/view/:view' })
 const SSE_PATH = new URLPattern({ pathname: '/:db/sse' })
 
-/** @type {Routes} */
+/** @type {Routes<CanapeConfig>} */
 export const ROUTES = [
 	{
 		pattern: VIEW_INFO,

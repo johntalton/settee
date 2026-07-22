@@ -2,12 +2,13 @@ import { MIME_TYPE_JSON } from "@johntalton/http-util"
 import { Settee } from "@johntalton/settee"
 
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
+/** @import { CanapeConfig } from '../index.js' */
 
 export class ViewRoute {
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async get(matches, state) {
 		const { config } = state

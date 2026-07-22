@@ -5,15 +5,21 @@ import { MIME_TYPE_JSON } from '@johntalton/http-util'
 import { Settee } from '@johntalton/settee'
 
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
+/** @import { CanapeConfig } from '../index.js' */
 
 export class InfoRoute {
 	/**
 	 * @param {RouteMatches} _matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async getRoot(_matches, state) {
 		const { config } = state
+
+		//
+		// console.log('--->', state.secFetchMetadata)
+
+
 
 		//
 		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
@@ -52,8 +58,8 @@ export class InfoRoute {
 
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async getDB(matches, state) {
 		const { config } = state
@@ -87,8 +93,8 @@ export class InfoRoute {
 
 	/**
 	 * @param {RouteMatches} matches
-	 * @param {RouteRequest} state
-	 * @returns {Promise<RouteAction>}
+	 * @param {RouteRequest<CanapeConfig>} state
+	 * @returns {Promise<RouteAction<CanapeConfig>>}
 	 */
 	static async getView(matches, state) {
 		const { config } = state
