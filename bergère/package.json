@@ -3,7 +3,7 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
-    "start": "http-server --cors -b -g -S -C ./certificates/bergere.next.internal-cert.pem -K ./certificates/bergere.next.internal-privkey.pem ./public",
+    "start": "http-server -b -g -S -C ./certificates/bergere.next.internal-cert.pem -K ./certificates/bergere.next.internal-privkey.pem ./public",
     "mkcert": "openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subj '/CN=bergere.next.internal' -keyout ./certificates/bergere.next.internal-privkey.pem -out ./certificates/bergere.next.internal-cert.pem",
     "import": "mkdir -p ./public/shared/@johntalton & cp -p -R  ../node_modules/@johntalton/json-tokenizer/ ./public/shared/@johntalton/json-tokenizer/"
   },

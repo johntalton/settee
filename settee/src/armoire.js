@@ -1,17 +1,17 @@
-/** biome-ignore-all lint/style/useExportsLast: <explanation> */
+/** biome-ignore-all lint/style/useExportsLast: worker thread kickoff */
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { isMainThread, parentPort, threadName, Worker, workerData } from 'node:worker_threads'
 
+import { SETTEE_DEFAULT } from './defs.js'
 import {
 	formatResults,
 	fromOptions,
 	importView,
-	processFilePath,
-	SETTEE_DEFAULT
-} from '@johntalton/settee'
+	processFilePath
+} from './util.js'
 
-/** @import { SetteeOptions, ViewFunction, ViewFunctionRowResult } from '@johntalton/settee' */
+/** @import { UserDocument, SetteeOptions, ViewFunction, ViewFunctionRowResult } from './type.js' */
 
 /**
  * @typedef {Object} ArmoireOptions
@@ -63,13 +63,16 @@ export class Armoire {
 		const iterator = dir[Symbol.asyncIterator]()
 
 		const next = async () => {
+			// biome-ignore lint/suspicious/noUnnecessaryConditions: loop until resolve
 			while(true) {
 				// signal?.throwIfAborted()
 				if(signal.aborted) {
 					// console.log('reject next on signal')
 					reject(new Error(signal.reason))
+					return undefined
 				}
 
+				// biome-ignore lint/performance/noAwaitInLoops: iterator loop
 				const { done, value } = await iterator.next()
 				if(done === undefined || done) {
 					return undefined
@@ -86,6 +89,7 @@ export class Armoire {
 		let remainingWorkers = threadCount
 
 		for(const worker of workers) {
+			// biome-ignore lint/suspicious/noLoopFunc: uses remaining to track count
 			worker.on('exit', () => {
 				remainingWorkers -= 1
 				// console.log('worker exited', remainingWorkers)
@@ -136,7 +140,7 @@ export class Armoire {
 	}
 
 	/**
-	 * @template T, K, V
+	 * @template {UserDocument} T, K, V
 	 * @param {{ type: string, filepath: string, filterKeys: Array<string>}} message
 	 * @param {ViewFunction<T, K, V>} mapFn
 	 */
@@ -148,7 +152,7 @@ export class Armoire {
 		}
 		else if(type === CONTROL_MESSAGE.FILE) {
 			const { filepath } = message
-			await processFilePath(filepath, mapFn, [], AbortSignal.timeout(1_000))
+			await processFilePath(filepath, mapFn, [], AbortSignal.timeout(1000))
 				.then(result => {
 					if(result === undefined) { return }
 					if(result.length !== 2) { return }

@@ -1,175 +1,15 @@
 /** biome-ignore-all lint/style/noExcessiveLinesPerFile: legacy */
-/** biome-ignore-all lint/style/noNestedTernary: <explanation> */
+/** biome-ignore-all lint/style/noNestedTernary: we like them */
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { Chifforobe } from './chifforobe.js'
+import { EMPTY_STRING, FILE_FLAGS, FILE_MODE, SETTEE_DEFAULT, SETTEE_INTERNAL_PROPERTIES } from './defs.js'
+import { ENV_NEW_DB_DIR, formatResults, fromOptions, fromOptionsResolved, importView, processFilePath } from './util.js'
 
 /** @import { Dirent } from 'node:fs' */
-
-/** @typedef {string & { readonly _brand: 'id' }} DocId */
-/** @typedef {string & { readonly _brand: 'rev' }} RevisionId */
-
-/** @typedef {'SHA-1'|'SHA-256'|'SHA-384'|'SHA-512'} KnownDigestAlgorithm */
-
-/** @typedef {crypto.webcrypto.Algorithm|KnownDigestAlgorithm|string} DigestAlgorithm */
-
-/**
- * @typedef {Object} SetteeOptionsResolved
- * @property {string} documentsRoot
- * @property {string} viewsRoot
- * @property {AbortSignal} signal
- * @property {DigestAlgorithm} digestAlgo
-*/
-
-/**
- * @typedef {Object} SetteeConstructionOptions
- * @property {string} db
- * @property {string} documentsDir
- * @property {string} viewsDir
- * @property {number} timeoutMs
- * @property {AbortSignal|undefined} [internal_signal] Overrides signal usage and creation
- */
-
-/** @typedef {Partial<SetteeOptionsResolved> & Partial<SetteeConstructionOptions>} SetteeOptions */
-
-
-/** @typedef {{ [SETTEE_INTERNAL_PROPERTIES.ID]: DocId,  [SETTEE_INTERNAL_PROPERTIES.REVISION]: RevisionId }} DocumentBase */
-/**
- * @template T
- * @typedef {DocumentBase & T } Document
- */
-
-/**
- * @template K, V
- * @typedef {Array<[ K, V ]>|Iterable<[ K, V ]>} ViewFunctionResult
-*/
-
-/**
- * @template K, V
- * @typedef {Object} ViewFunctionRowResultItem
- * @property {DocId} id
- * @property {K} key
- * @property {V} value
- */
-
-/**
- * @template K, V
- * @typedef {Object} ViewFunctionRowResult
- * @property {number} total_count
- * @property {Array<ViewFunctionRowResultItem<K, V>>} rows
- */
-
-/**
- * @template D, K, V
- * @typedef {(doc: Document<D>) => ViewFunctionResult<K, V>|undefined} ViewFunction
- */
-
-export const SETTEE_ENV = {
-	DB_ROOT: 'SETTEE_DB',
-	DOCUMENTS_DIRECTORY: 'SETTEE_DOCS_DIR',
-	VIEWS_DIRECTORY: 'SETTEE_VIEWS_DIR',
-	TIMEOUT_MS: 'SETTEE_TIMEOUT_MS',
-	DIGEST_ALGO: 'SETTEE_DIGEST_ALGORITHM',
-	NEW_DATABASE_ROOT: 'SETTEE_NEW_DB'
-}
-
-export const SETTEE_DEFAULT = {
-	RESOLVE_PREFIX: '.',
-	DB: 'db',
-	DOCS: 'docs',
-	VIEWS: 'views',
-
-	DIGEST_ALGO: 'SHA-1',
-	TIMEOUT_MS: '100',
-
-	/** @type {BufferEncoding} */
-	FILE_ENCODING: 'utf-8',
-
-	FILE_EXTENSION: 'json',
-	VIEW_EXTENSION: 'js',
-
-	IGNORE_PREFIX: '.'
-}
-
-export const FILE_FLAGS = {
-	DOC_GET: 'r',
-	DOC_SET: 'ax',
-	DOC_UPDATE: 'w',
-	MAP_PROCESS: 'r'
-}
-export const FILE_MODE = 0o600
-
-export const SETTEE_INTERNAL_PROPERTIES = {
-	ID: 'settee:id',
-	REVISION: 'settee:revision'
-}
-
-export const EMPTY_STRING = ''
-
-const ENV_DB_DIR = process.env[SETTEE_ENV.DB_ROOT] ?? SETTEE_DEFAULT.DB
-const ENV_DOCS_DIR = process.env[SETTEE_ENV.DOCUMENTS_DIRECTORY] ?? SETTEE_DEFAULT.DOCS
-const ENV_VIEWS_DIR = process.env[SETTEE_ENV.VIEWS_DIRECTORY] ?? SETTEE_DEFAULT.VIEWS
-const ENV_TIMEOUT_MS = Number.parseInt(process.env[SETTEE_ENV.TIMEOUT_MS] ?? SETTEE_DEFAULT.TIMEOUT_MS, 10)
-const ENV_DIGEST_ALGO = process.env[SETTEE_ENV.DIGEST_ALGO] ?? SETTEE_DEFAULT.DIGEST_ALGO
-const ENV_NEW_DB_DIR = process.env[SETTEE_ENV.NEW_DATABASE_ROOT]
-
-/**
- * @param {SetteeOptions|undefined} [options]
- * @param {string} [resolverPrefix=SETTEE_DEFAULT.RESOLVE_PREFIX]
- * @returns {SetteeConstructionOptions & Omit<SetteeOptionsResolved, 'signal'>}
- */
-export function fromOptionsResolved(options, resolverPrefix = SETTEE_DEFAULT.RESOLVE_PREFIX) {
-	const db = options?.db ?? ENV_DB_DIR
-	const documentsDir = options?.documentsDir ?? ENV_DOCS_DIR
-	const viewsDir = options?.viewsDir ?? ENV_VIEWS_DIR
-	const timeoutMs = options?.timeoutMs ?? ENV_TIMEOUT_MS
-	const digestAlgo = options?.digestAlgo ?? ENV_DIGEST_ALGO
-
-	const documentsRoot = path.resolve(resolverPrefix, options?.documentsRoot ?? path.join(db, documentsDir))
-	const viewsRoot = path.resolve(resolverPrefix, options?.viewsRoot ?? path.join(db, viewsDir))
-
-	if(Number.isFinite(timeoutMs)) {}
-	if(timeoutMs <= 0) {}
-
-	return {
-		db,
-		documentsDir,
-		viewsDir,
-		timeoutMs,
-		digestAlgo,
-		documentsRoot,
-		viewsRoot
-	}
-}
-
-/**
- * @param {SetteeOptions|undefined} [options]
- * @param {string|undefined} [resolverPrefix]
- * @returns {SetteeOptionsResolved}
- */
-export function fromOptions(options, resolverPrefix) {
-	const {
-		documentsRoot,
-		viewsRoot,
-		digestAlgo,
-		timeoutMs
-	} = fromOptionsResolved(options, resolverPrefix)
-
-	// if we have an internal signal, use that, otherwise
-	//  combined optional signal with timeout or just timeout
-	const signal = options?.internal_signal ?? ((options?.signal === undefined) ?
-		AbortSignal.timeout(timeoutMs) :
-		AbortSignal.any([ options.signal, AbortSignal.timeout(timeoutMs) ]))
-
-	return {
-		documentsRoot,
-		viewsRoot,
-		digestAlgo,
-		signal
-	}
-}
+/** @import { SetteeOptions, DocId, RevisionId, UserDocument, Document, DigestAlgorithm, ViewFunctionResult, ViewFunctionRowResult } from './type.js' */
 
 /**
  * @param {string|undefined} id
@@ -207,7 +47,7 @@ export function pathFromId(documentsRoot, id) {
 }
 
 /**
- * @template T
+ * @template {UserDocument} T
  * @param {Document<T>|T} doc
  * @param {DigestAlgorithm} digestAlgo
  * @returns {Promise<RevisionId>}
@@ -231,7 +71,7 @@ export async function revisionFrom(doc, digestAlgo) {
 }
 
 /**
- * @template T
+ * @template {UserDocument} T
  * @param {DocId} id
  * @param {Document<T>|T} doc
  * @param {DigestAlgorithm} digestAlgo
@@ -247,7 +87,7 @@ export async function internalDocFrom(id, doc, digestAlgo) {
 }
 
 /**
- * @template D
+ * @template {UserDocument} D
  * @param {Document<D>} doc
  * @param {DigestAlgorithm} digestAlgo
  * @returns {Promise<boolean>}
@@ -257,95 +97,6 @@ export async function internalDocHasIntegrity(doc, digestAlgo) {
 	const computedRevision = await revisionFrom(doc, digestAlgo)
 
 	return computedRevision === revision
-}
-
-/**
- * @param {string} viewName
- * @param {SetteeOptions|undefined} [options]
- */
-export function pathFromView(viewName, options) {
-	const {
-		viewsRoot
-	} = fromOptions(options)
-
-	return path.format({
-		dir: viewsRoot,
-		name: viewName,
-		ext: SETTEE_DEFAULT.VIEW_EXTENSION
-	})
-}
-
-/**
- * @template D, K, V
- * @param {string} viewName
- * @param {SetteeOptions|undefined} [options]
- * @returns {Promise<ViewFunction<D, K, V>>}
- */
-export async function importView(viewName, options) {
-	const viewPath = pathFromView(viewName, options)
-
-	const mod = await import(viewPath)
-	// 	.catch(e => {
-	// 		console.log(e.message)
-	// 		if(e.code === 'ERR_MODULE_NOT_FOUND') {
-	// 			console.log('unable to load map function', e.message)
-	// 		}
-
-	// 		return undefined
-	// 	})
-
-	// if(mod === undefined) { throw new Error('unable to load module') }
-	const { default: mapFn, map } = mod
-	const fn = map ?? mapFn
-	if(fn === undefined) { throw new Error('unable to load map function') }
-	return fn
-}
-
-/**
- * @template D, K, V
- * @param {string} filepath
- * @param {(doc: Document<D>) => ViewFunctionResult<K, V>|undefined} fn
- * @param {Array<K>} filterKeyList
- * @param {AbortSignal} signal
- * @returns {Promise<[ DocId, ViewFunctionResult<K, V> ]|undefined>}
- */
-export async function processFilePath(filepath, fn, filterKeyList, signal) {
-	const json = await fs.readFile(filepath, { encoding: SETTEE_DEFAULT.FILE_ENCODING, flag: FILE_FLAGS.MAP_PROCESS, signal })
-	const internalDoc = JSON.parse(json)
-
-	const id = internalDoc[SETTEE_INTERNAL_PROPERTIES.ID]
-
-	const keySet = await Promise.try(fn, internalDoc)
-	if(keySet === undefined) { return }
-
-	if(filterKeyList === undefined || filterKeyList.length === 0) {
-		return [ id, [ ...keySet ] ]
-	}
-
-	const filteredKeySet = [ ...keySet ].filter(item => filterKeyList.includes(item[0]))
-	return [ id, filteredKeySet ]
-}
-
-/**
- * @template K, V
- * @param {Map<DocId, ViewFunctionResult<K, V>>} results
- * @param {number} total_count
- * @param {Array<K>} filterKeyList
- * @returns {ViewFunctionRowResult<K, V>}
- */
-export function formatResults(results, total_count, filterKeyList) {
-	const output = results
-		.entries()
-		.filter(entry => entry[1] !== undefined)
-		.map(([ docId, result ]) => [ ...result ].map(item => ({ id: docId, key: item[0], value: item[1] })))
-		.reduce((accumulator, value) => {
-			const filterValue = filterKeyList.length > 0 ? value.filter(element => filterKeyList.includes(element.key)) : value
-			accumulator.push(...filterValue)
-
-			return accumulator
-		}, [])
-
-	return { total_count, rows: output }
 }
 
 export class Settee {
@@ -386,7 +137,10 @@ export class Settee {
 			}
 		}
 		catch(e) {
-			// if(e.name === 'AbortError') { return }
+			if(e instanceof Error && e.name === 'AbortError') {
+				console.log('Abort Changes Generator')
+			}
+
 			throw e
 		}
 	}
@@ -461,7 +215,7 @@ export class Settee {
 	static async _info(options) {
 		const {
 			documentsRoot,
-			signal
+			// signal
 		} = fromOptions(options)
 
 		let total_count = 0
@@ -472,7 +226,7 @@ export class Settee {
 			if(!entry.isFile()) { continue }
 			if(entry.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { continue }
 
-			const stat = await fs.stat(path.join(documentsRoot, entry.name), { bigint: false, signal })
+			const stat = await fs.stat(path.join(documentsRoot, entry.name), { bigint: false /*, signal */ })
 			size += stat.size
 			total_count += 1
 		}
@@ -505,7 +259,7 @@ export class Settee {
 			if(!value.isFile()) { return }
 			if(value.name.startsWith(SETTEE_DEFAULT.IGNORE_PREFIX)) { return }
 
-			return fs.stat(path.join(documentsRoot, value.name), { bigint: false, signal })
+			return fs.stat(path.join(documentsRoot, value.name), { bigint: false /*, signal */ })
 				.then(stat => {
 					total_count += 1
 					size += stat.size
@@ -515,6 +269,7 @@ export class Settee {
 		while(!overallDone) {
 			signal.throwIfAborted()
 			const items = Array.from({ length: 64 }, () => iter.next().then(process))
+			// biome-ignore lint/performance/noAwaitInLoops: needed
 			await Promise.all(items)
 		}
 
@@ -588,12 +343,13 @@ export class Settee {
 		} = fromOptions(options)
 
 		const internalDoc = await Settee.get(id, { ...options, internal_signal: signal })
-		if(!internalDocHasIntegrity(internalDoc, digestAlgo)) { return true }
+		const hasIntegrity = await internalDocHasIntegrity(internalDoc, digestAlgo)
+		if(!hasIntegrity) { return true }
 		return internalDoc[SETTEE_INTERNAL_PROPERTIES.REVISION] !== revision
 	}
 
 	/**
-	 * @template T
+	 * @template {UserDocument} T
 	 * @param {DocId} id
 	 * @param {SetteeOptions|undefined} [options]
 	 * @returns {Promise<Document<T>>}
@@ -610,6 +366,7 @@ export class Settee {
 		// const futureStats = fs.stat(filepath, {})
 
 		const json = await fs.readFile(filepath, { encoding: SETTEE_DEFAULT.FILE_ENCODING, flag: FILE_FLAGS.DOC_GET, signal })
+		/** @type {Document<T>} */
 		const internalDoc = JSON.parse(json)
 		const valid = await internalDocHasIntegrity(internalDoc, digestAlgo)
 		if(!valid) { throw new Error('invalid integrity') }
@@ -620,7 +377,7 @@ export class Settee {
 	}
 
 	/**
-	 * @template T
+	 * @template {UserDocument} T
 	 * @param {DocId} id
 	 * @param {T} doc
 	 * @param {SetteeOptions|undefined} [options]
@@ -648,7 +405,7 @@ export class Settee {
 	}
 
 	/**
-	 * @template T
+	 * @template {UserDocument} T
 	 * @param {Document<T>} doc
 	 * @param {SetteeOptions|undefined} [options]
 	 * @returns {Promise<Document<T>>}
@@ -733,6 +490,7 @@ export class Settee {
 
 			const filepath = path.join(documentsRoot, entry.name)
 			await processFilePath(filepath, fn, [], signal)
+				// biome-ignore lint/suspicious/noLoopFunc: uses total_count
 				.then(results => {
 					if(results === undefined) { return }
 					if(results.length !== 2) { return }

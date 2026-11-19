@@ -24,6 +24,7 @@
 
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true,
 
     "allowJs": true,
     "checkJs": true,

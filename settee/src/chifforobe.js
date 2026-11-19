@@ -2,9 +2,10 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 //
-import { FILE_MODE, fromOptions  } from './settee.js'
+import { FILE_MODE } from './defs.js'
+import {fromOptions  } from './util.js'
 
-/** @import { SetteeOptions, DocId, ViewFunctionResult } from './settee.js' */
+/** @import { SetteeOptions, DocId, ViewFunctionResult } from './type.js' */
 
 /**
  * @typedef {Object} ChifforobeOptions
@@ -60,13 +61,20 @@ export class Chifforobe {
 	 * @param {(SetteeOptions & ChifforobeOptions)|undefined} [options]
 	 */
 	static async info(viewName, options) {
-		const { viewsRoot, signal } = fromOptions(options)
+		const {
+			viewsRoot,
+			// signal
+		} = fromOptions(options)
 		const { cacheRoot } = fromChifforobeOptions(viewsRoot, options)
 		const viewCacheFile = cacheFileForView(cacheRoot, viewName)
 
 		const name = path.relative(viewsRoot, viewCacheFile)
-		const stat = await fs.stat(viewCacheFile, { signal })
-			.catch(e => ({ code: e.code }))
+		const stat = await fs.stat(viewCacheFile /*, { signal }*/)
+			.then(s => ({ code: undefined, ...s }))
+			.catch(e => ({
+				code: e.code,
+				size: undefined, mtime: undefined, mtimeMs: undefined
+			}))
 
 		const { code, size, mtime, mtimeMs } = stat
 

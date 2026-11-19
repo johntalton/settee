@@ -8,15 +8,12 @@
     "flame": "clinic flame -- node --env-file=.env ./src/index.js",
     "heap": "clinic heapprofiler -- node --env-file=.env ./src/index.js",
     "doctor": "clinic doctor -- node --env-file=.env ./src/index.js",
-    "lint": "biome check"
+    "lint": "biome check ."
   },
   "dependencies": {
-    "@johntalton/http-util": "^7.2.0",
-    "@johntalton/http-core": "^1.2.1",
+    "@johntalton/http-util": "^9.0.0",
+    "@johntalton/http-core": "^1.4.2",
     "@johntalton/settee": "^1.0.0",
     "@johntalton/sse-util": "^1.0.0"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.0"
   }
 }

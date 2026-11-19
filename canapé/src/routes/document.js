@@ -1,9 +1,13 @@
 import { Conditional, ETag, MIME_TYPE_JSON } from '@johntalton/http-util'
 import { isValidDocId, SETTEE_INTERNAL_PROPERTIES, Settee } from '@johntalton/settee'
+import { matchSecFetchPolicy } from '../utils/sec-fetch-policy.js'
 
-/** @import { DocId, Document, SetteeOptions } from '@johntalton/settee' */
+/** @import { DocId, UserDocument, Document, SetteeOptions } from '@johntalton/settee' */
 /** @import { RouteMatches, RouteRequest, RouteAction } from '@johntalton/http-core' */
 /** @import { CanapeConfig } from '../index.js' */
+/** @import { AppliedPreferencesInput } from '@johntalton/http-util/headers' */
+
+export const DEFAULT_API_TIMEOUT = Temporal.Duration.from({ seconds: 5 })
 
 export class DocumentRoute {
 	/**
@@ -24,28 +28,67 @@ export class DocumentRoute {
 		const { config } = state
 		const { db, id } = matches
 
-		if(db === undefined) { return { ...state, type: '404', message: 'database undefined' }}
-		const foundDB = config.dbs.find(value => value.name === db)
-		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found' } }
+		/** @type {AppliedPreferencesInput} */
+		const appliedPreferences = {}
 
-		if (!isValidDocId(id)) { return { ...state, type: '404', message: 'invalid document id' } }
+		//
+		const wait = Temporal.Duration.from({
+			seconds: state.preferences.wait ?? DEFAULT_API_TIMEOUT.total('seconds')
+		})
+		appliedPreferences.wait = state.preferences.wait === undefined ? undefined : wait.total('seconds')
+		const waitSignal = AbortSignal.timeout(wait.total('milliseconds'))
+
+		//
+		const signal = AbortSignal.any([
+			state.shutdownSignal,
+			waitSignal
+		])
+
+
+		//
+		if(!matchSecFetchPolicy(state.secFetchMetadata, {
+			method: state.method,
+			allowSubdomains: true
+		})) {
+			//
+			console.log('REJECT - Resource Isolation Policy', state.secFetchMetadata)
+			return {
+				...state,
+				type: 'forbidden',
+				context: { appliedPreferences }
+			}
+		}
+
+		//
+		if(db === undefined) { return { ...state, type: '404', message: 'database undefined', context: { appliedPreferences } }}
+		const foundDB = config.dbs.find(value => value.name === db)
+		if(foundDB === undefined) { return { ...state, type: '404', message: 'database not found', context: { appliedPreferences } } }
+
+		if (!isValidDocId(id)) { return { ...state, type: '404', message: 'invalid document id', context: { appliedPreferences } } }
 
 		//
 		const negotiatedType = state.accept.select.type([ MIME_TYPE_JSON ])
 		if(negotiatedType?.mimetype !== MIME_TYPE_JSON) {
-			return { ...state, type: 'not-acceptable', acceptableTypes: [ MIME_TYPE_JSON ] }
+			return {
+				...state,
+				type: 'not-acceptable',
+				acceptableTypes: [ MIME_TYPE_JSON ],
+				context: { appliedPreferences }
+			}
 		}
 
 		const negotiatedEncoding = state.accept.select.encoding()
 
 		try {
 			/** @type {Document<Object>} */
-			const obj = await Settee.get(id, foundDB)
+			const obj = await Settee.get(id, { ...foundDB, signal })
 
-			const etag = obj[SETTEE_INTERNAL_PROPERTIES.REVISION]
-			if(etag === undefined) {
+			const revision = obj[SETTEE_INTERNAL_PROPERTIES.REVISION]
+			if(revision === undefined) {
 				throw new Error('document missing revision tag')
 			}
+
+			const etag = ETag.strong(revision)
 
 			const testMatch = state.conditions.match.length > 0
 			const testNonMatch = state.conditions.noneMatch.length > 0
@@ -53,12 +96,13 @@ export class DocumentRoute {
 			if(testMatch && Conditional.hasAny(state.conditions.match)) {
 				// match any
 			}
-			else if(testMatch && !Conditional.hasEtag(state.conditions.match, etag)) {
+			else if(testMatch && !Conditional.hasEtagItem(state.conditions.match, etag, true)) {
 				// not found in etag list
 				return {
 					...state,
 					type: 'precondition-failed',
-					etag: ETag.strong(etag)
+					etag,
+					context: { appliedPreferences }
 				}
 			}
 
@@ -67,12 +111,13 @@ export class DocumentRoute {
 				// todo: what nonsense is this
 				// return not-modified
 			}
-			else if(testNonMatch && Conditional.hasEtag(state.conditions.noneMatch, etag)) {
+			else if(testNonMatch && Conditional.hasEtagItem(state.conditions.noneMatch, etag, true)) {
 				// found match in etag list
 				return {
 					...state,
 					type: 'not-modified',
-					etag: ETag.strong(etag)
+					etag,
+					context: { appliedPreferences }
 				}
 			}
 
@@ -82,19 +127,20 @@ export class DocumentRoute {
 				obj,
 				encoding: negotiatedEncoding?.name,
 				// lastModified: undefined,
-				etag: ETag.strong(etag),
+				etag,
+				context: { appliedPreferences }
 			}
 		}
 		catch(error) {
 			if(!Error.isError(error)) { throw error }
 			console.log('document get error', error.message, state.url.href)
-			if(error.code === 'ENOENT') { return { ...state, type: '404', message: 'document does not exist' }}
+			if('code' in error && error.code === 'ENOENT') { return { ...state, type: '404', message: 'document does not exist', context: { appliedPreferences } }}
 			throw error
 		}
 	}
 
 	/**
-	 * @template T
+	 * @template {UserDocument} T
 	 * @param {RouteRequest<CanapeConfig>} state
 	 * @param {DocId} id
 	 * @param {T} doc
@@ -129,7 +175,7 @@ export class DocumentRoute {
 	}
 
 	/**
-	 * @template T
+	 * @template {UserDocument} T
 	 * @param {RouteRequest<CanapeConfig>} state
 	 * @param {DocId} id
 	 * @param {Document<T>} doc

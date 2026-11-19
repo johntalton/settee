@@ -6,5 +6,8 @@
     "settee",
     "canapé",
     "bergère"
-  ]
+  ],
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8"
+  }
 }
